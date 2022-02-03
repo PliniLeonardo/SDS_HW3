@@ -52,12 +52,20 @@ out=MLEdag(D_train,tau=0.3,mu=1,rho=1.2)
 # Part 2 ------------------------------------------------------------------
 
 set.seed(2018)
-p <- 50; n <- 1000;
-X <- matrix(rnorm(n*p), n, p)
+p <- 50; n <- 1000;sparsity <- 2/p
+## generate a random lower triangular adjacnecy matrix
+A <- matrix(rbinom(p*p, 1, sparsity)*sign(runif(p*p, -1, 1))*runif(p*p, 0.7, 1), p, p)
+A[upper.tri(A, diag=TRUE)] <- 0
 
+## num of edges in A
+sum(A != 0) # 43
+## data matrix
+X <- matrix(rnorm(n*p), n, p) %*% t(solve(diag(p) - A))
+
+#Loglikelihood
 loglikelihood=function(A,sigma_square,X){
-  n=ncol(A)
-  p=nrow(A)
+  n=ncol(X)
+  p=nrow(X)
   tot=0
   for (j in 1:n){
     somma2=0
@@ -68,25 +76,30 @@ loglikelihood=function(A,sigma_square,X){
           somma1=somma1+A[j,k]*X[j,k]
         }
       }
-      somma2=X[i,j]-somma1
+      partial=X[i,j]-somma1
     }
-    somma2=somma2^2
+    somma2=somma2+partial^2
   }
   tot=tot+(1/(2*sigma_square)*somma2+n*log(sigma_square)/2)
   return(-tot)
 }
 
+#generate D matrix 
+#number of hyphothesized edges
+q=43
 D <- matrix(0, p, p)
-index1=sample(1:p,250,replace=TRUE)
-index2=sample(1:p,250,replace=TRUE)
-for (i in 1:250){
+index1=sample(1:p,q,replace=TRUE)
+index2=sample(1:p,q,replace=TRUE)
+for (i in 1:q){
   D[index1[i],index2[i]]=1
 }
 
+#MLEdag method to recover A.H0 and A.H1
 out=MLEdag(X=X,D=D,tau=0.3, mu=1, rho=1.2)
 A_costrained=out$A.H0
 A_uncostrained=out$A.H1
 
+#loglikelihood as a function of just sigma squared
 l_sigma=function(A,sigma_square,X){
   #perform the loglikelihood in function of sigma squared
   function1=function(sigma_square){
@@ -112,3 +125,13 @@ likelihood_uncostrained=exp(maximum_value_l_uncostrained)
 
 #Built the statistic U_n
 U=likelihood_uncostrained/likelihood_costrained
+
+#Comment
+# U=35.95, so for alpha=0.05, we reject the null hypothesis
+
+# Part 3 ------------------------------------------------------------------
+
+#SIZE
+
+
+
