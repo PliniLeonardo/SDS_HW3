@@ -17,4 +17,14 @@ log_likeihood = function(X, A, sigma.square){
   }
 }
 
-
+sigma.estimator = function(X, A){
+  n = dim(X)[1]
+  p = dim(X)[2]
+  sigma = 0
+  for(j in 1:p){
+    K = which((1:p)!=j)
+    inners = apply(X[, K] * A[j, K], 1, sum)
+    sigma = sigma + sum((X[,j]-inners)^2)
+  }
+  return(sigma/(n*p))
+}
