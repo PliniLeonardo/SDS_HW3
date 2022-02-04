@@ -1,54 +1,7 @@
 # Part 1 ------------------------------------------------------------------
 
 library(clrdag)
-set.seed(2018)
-p <- 50; n <- 1000; sparsity <- 2/p
 
-## generate a random lower triangular adjacnecy matrix
-A <- matrix(rbinom(p*p, 1, sparsity)*sign(runif(p*p, -1, 1))*runif(p*p, 0.7, 1), p, p)
-A[upper.tri(A, diag=TRUE)] <- 0
-
-## permute the order of adjacency matrix
-idx <- sample(1:p)
-A <- A[idx,idx]
-
-## num of edges in A
-sum(A != 0) # 43
-
-## data matrix
-X <- matrix(rnorm(n*p), n, p) %*% t(solve(diag(p) - A))
-
-## estimate the graph
-t <- proc.time()
-out <- MLEdag(X=X, tau=0.3, mu=1, rho=1.2)
-proc.time() - t 
-
-## Frobenius distance to the truth adjacency matrix
-sum((out$A - A)^2) # 0.0285789
-
-## Hamming distance to the truth graph
-sum(abs((out$A != 0) - (A != 0))) # 0
-
-## test edge 1 --> 3
-D <- matrix(0, p, p)
-D[3,1] <- 1
-out <- MLEdag(X=X, D=D, tau=0.3, mu=1, rho=1.2)
-out$pval # 0.7496623
-
-## test edge 7 --> 4
-D <- matrix(0, p, p)
-D[4,7] <- 1
-out <- MLEdag(X=X, D=D, tau=0.3, mu=1, rho=1.2)
-out$pval # 8.827349e-155
-
-#randomly split
-'''
-size=floor(0.5*nrow(X))
-indexes=sample(seq_len(nrow(X)),size=size)
-D_train=X[indexes,]
-D_test=X[-indexes,]
-out=MLEdag(D_train,tau=0.3,mu=1,rho=1.2)
-'''
 # Part 2 ------------------------------------------------------------------
 
 set.seed(2018)
@@ -61,7 +14,7 @@ A[upper.tri(A, diag=TRUE)] <- 0
 sum(A != 0) # 26
 ## data matrix
 X <- matrix(rnorm(n*p), n, p) %*% t(solve(diag(p) - A))
-
+'''
 #Loglikelihood
 loglikelihood=function(A,sigma_square,X){
   n=ncol(X)
@@ -82,6 +35,25 @@ loglikelihood=function(A,sigma_square,X){
   }
   tot=tot+(1/(2*sigma_square)*somma2+n*log(sigma_square)/2)
   return(-tot)
+}
+'''
+Log_likelihood = function(X, A, sigma.square){
+  #The formula is: tot = -(sum(middle/const1 + const2))
+  # where middle = sum((i-th row of X - inner)^2)
+  #  where inner= sum(j-th row of A \ j-th col * i-th row of X \ j-th col)
+  tot = 0
+  n = dim(X)[1]
+  p = dim(X)[2]
+  for(j in 1:p){
+    
+    # Finding the indexes K = {k s.t. k is in [1,p]\j}
+    K = which((1:p)!=j)
+    # in k we have the indexes of the row without j
+    
+    inners = apply(X[, K] * A[j, K], 1, sum) # n length vector containing the inner sums
+    middle = sum((X[, j] - inners)^2)
+    tot = tot - (middle/(2*sigma.square) + (n/2*log(sigma.square)))
+  }
 }
 
 #generate D matrix 
