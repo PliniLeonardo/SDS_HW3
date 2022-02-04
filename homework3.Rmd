@@ -1,0 +1,161 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+We have a sampling of $n$ independent observation from a gaussian *joint* distribution of dimension $p$. These data are stored into a matrix $\mathbb{X} \in \mathbb{R}^{n\times p}$.<br>
+
+Given the matrix we want to discover the unknown adiacency matrix that models the DAG of the joint distribution that has generated our observations.
+
+This matrix is $\mathbb{A}$ and it's a lower triangular matrix that belongs to $\mathbb{R}^{p\times p}$ and it's such that it has a 0 in the position $(i,j)$ if $j \not\in pa(X_i)$ else the value means the strenght of the relation between these two nodes.<br>
+
+We know how to model our observation, we know what $\mathbb{A}$ means, but how can we link the distribution of the j-th random variable (remember that we have a p-dimensional random vector) to the matrix $\mathbb{A}$?<br>
+Well we can say that the j-th random variable $X_j$ can be computed as follows:
+\begin{equation}
+  X_j = \sum_{k | k \neq j}\mathbb{A[j,k]\cdot X_k}+\epsilon_j
+\end{equation}
+The gaussian is in $\epsilon$, in fact $\epsilon_j \sim N_1(0, \sigma^2)$.
+
+So we have a model that depends from two parameters that are $\mathbb{A}$ and $\sigma^2$. At this point we can proceed to the things that are of interest for us.
+
+Since we can obtain the distributions of the X from our parameters, we want to discover our parameter starting from our observations, so the problem reduces to find $\theta = (\mathbb{A}, \sigma^2)$ starting from $\mathbb{X}$.
+
+In order to do this we can use the log likelihood that's defined as follows:
+\begin{equation}
+  \mathcal{\ell}_n(\mathbb{A}, \sigma^2) \propto - \sum_{j=1}^p \left (\frac{1}{2\sigma^2} \sum_{i=1}^n \left( \mathbb{X}[i,j] - \sum_{k | k\neq j} \mathbb{A}[j,k]\cdot \mathbb{X}[i,k]\right)^2 + \frac{n}{2}ln\sigma^2 \right)
+\end{equation}
+Let's enroll it:
+We have three sums that are, going from the inner to the outer:
+
+* *inner*: $\sum_{k | k\neq j} \mathbb{A}[j,k]\cdot \mathbb{X}[i,k]$ where we are doing the dot product from the weight that has the eventual edge that goes from $k$ to $j$ (scalar) and the value of the k-th random variable ($X_k$) in the i-th sample, than we sum all these values. This can be seen as a kind of a weighted sum of the i-th sample where the weights are the influences that has the variable j to the other random variables. So it can be seen as a "how much j has influenced in total the sample $i$"
+* *middle*: $\sum_{i=1}^n \left( \mathbb{X}[i,j] - \text{inner}\right )^2$ where for each of the i-th observation of the j-th random variable, we subtract the sum obtained in the inner that is a scalar, than we sum all these values. We are subtracting the value of the j-th random variable in the sample i with the influence that has had this variable over the other variable, than we do the square of this difference, so it's hight either if $X_j$ have a big value in the i-th sample without influencing too much the other variable, or if the variable has a low value (maybe negative) and has a big influence on the other ones
+* *outer*: $\sum_{j=1}^p \frac{\text{middle}}{2\sigma^2} + \frac{n}{2}ln\sigma^2$ We sums up the value obtained from all the $p$ random variables multiplicated and summed with constants that are dependent from $\sigma^2$
+
+Let's see it in code:
+
+
+```{r}
+log_likeihood = function(X, A, sigma.square){
+  
+  tot = 0
+  n = dim(X)[1]
+  p = dim(X)[2]
+  for(j in 1:p){
+    
+    # Finding the indexes K = {k s.t. k is in [1,p]\j}
+    K = which((1:p)!=j)
+    # in k we have the indexes of the row without j
+      
+    inners = apply(X[, K] * A[j, K], 1, sum) # n length vector containing the inner sums for each i-th sample
+    middle = sum((X[, j] - inners)^2)  # as a matter of fact in the middle we are working on the j-th columns
+    tot = tot - (middle/(2*sigma.square) + (n/2*log(sigma.square)))
+  }
+}
+```
+
+Since MLEdag computes for us the estimate of the matrix $\mathbb{A}$ and the matrix $\mathbb{X}$ is what we have given that it's our observation, we can optimize the log likelihood in order to retrieve sigma, so it'll be the sigma.MLE
+
+```{r}
+sigma.MLE = function(X, A)
+  out_costrained=optim(
+                par=c(1),
+                fn=function(sigma.sq)
+                  log_likeihood(X,A, sigma.square),
+                method=c("Brent"),
+                lower = 0,
+                upper = 10000,
+                control = list(fnscale = -1)
+  )
+```
+
+According with [Chunlin Li Et. al](https://elearning.uniroma1.it/pluginfile.php/1112893/mod_assign/introattachment/0/Likelihood%20Ratio%20Tests%20for%20a%20Large%20Directed%20Acyclic%20Graph.pdf?forcedownload=1) we can also aproximate $\sigma^2$ with:
+\begin{equation}
+  \hat{\sigma}^2 = (np)^{-1} \sum_{j=1}^p \sum_{i=1}^n\left ( \mathbb{X}[i,j] - \sum_{k | k\neq j} \mathbb{A}[j,k]\cdot \mathbb{X}[i,k] \right ) ^2
+\end{equation}
+
+In code we have:
+
+```{r}
+sigma.estimator = function(X, A){
+  n = dim(X)[1]
+  p = dim(X)[2]
+  sigma = 0
+  for(j in 1:p){
+    K = which((1:p)!=j)
+    inners = apply(X[, K] * A[j, K], 1, sum)
+    sigma = sigma + sum((X[,j]-inners)^2)
+  }
+  return(sigma/(n*p))
+}
+```
+
+Back to our business... We have a way to estimate $\mathbb{A}$ by the clrdag library's function MLEdag and, once we have it we can now compute $\sigma^2$ in the two way of above.
+Let's now generate our observation $\mathbb{X}$ using an adiacency matrix $\mathbb{A}$ that for the moment we suppose to be **unknown**:
+```{r}
+# Suppose to have 100 observation of 10 random variables
+n = 100
+p = 10
+
+# Generating the hidden Adiacency matrix
+A.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A.hidden[upper.tri(A.hidden, diag = T)] = 0
+A.hidden[1, 2] = 1
+A.hidden[3, 6] = 1
+A.hidden[9, 30] = 1
+A.hidden[200, 249] = 1
+
+# X is generated gaussian mantaining the dependencies described by the adiacency matrix A
+X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.hidden) ) 
+
+```
+
+We've said that A is unknown, so if we want to test the existence of some link in the Dag or some specific pathway we can't look into it, so we need a test.
+
+## Test the linkages in X
+If we want to see if a set of linkages $\mathcal{F} = \{(j,k)\}$ belongs to the Graph we can set up a test over $\mathbb{A}$ where:
+\begin{equation}
+  H_0 : \mathbb{A}[j,k] = 0 \forall (j,k) \in \mathcal{F}
+\end{equation}
+Once we have this, we can split \mathbb{X} in train and set, in the train half of observation we'll compute the **constrained** MLEs for $\mathbb{A}$ and $\sigma^2$ accordingly to $H_0$, namely $\hat{\theta}_0^{tr}$, instead with the testing half of our observation we'll compute the **unconstrained** MLEs, namely $\hat{\theta}^{te}$.
+
+In order to do this we must compute:
+* $\hat{\theta}_0^{tr} = (\hat{\mathbb{A}}_0, \hat{\sigma}_0)$
+* $\hat{\theta}^{te} = (\hat{\mathbb{A}}, \hat{\sigma})$
+
+Given these ingredients we can substitute these thetas into the likelihoods and obtain the **split Likelihood ratio**:
+\begin{equation}
+  U_n = \frac{\mathcal{L}(\hat{\theta}^{te} | \mathbb{X}^{tr})}{\mathcal{L}(\hat{\theta}_0^{tr} | \mathbb{X}^{tr})}
+\end{equation}
+**IF** $U_n \gt \frac{1}{\alpha}$ then we can **reject** $H_0$.<br>
+
+Since we have the log likelihood, we can easily transform our disequality into a more manageable form:
+\begin{align}
+  &U_n > \frac{1}{\alpha}\\
+  &\iff \frac{\mathcal{L}(\hat{\theta}^{te} | \mathbb{X}^{tr})}{\mathcal{L}(\hat{\theta}_0^{tr} | \mathbb{X}^{tr})} \gt \frac{1}{\alpha}\\
+  &\iff \mathcal{\ell}(\hat{\theta}^{te} | \mathbb{X}^{tr}) - \mathcal{\ell}(\hat{\theta}_0^{tr} | \mathbb{X}^{tr}) \gt - ln(\alpha)
+\end{align}
+
+Suppose that we have the following set of linkages of which we want to test the existence: $\mathcal{F}=\{  (1, 2), (3, 6), (9, 30)\}$
+So our $H_0$ is **any** $\mathbb{A}$ such that **all** the tuples in $\mathcal{F}$ have a zero in $\mathbb{A}$.<br>
+This can be computed using MLEdag and passing a mask matrix of size $(p \times p)$ that has all zeros and has ones only in the position of the linkages for which we want to build the test.
+```{r}
+
+#Splitting the observations into test and train
+X.tr = X[1:n%/%2,]
+X.te = X[n%/%2+1:n,]
+
+# Building the mask matrix D
+D = matrix(0, p, p)
+D[1, 2] = 1
+D[3, 6] = 1
+D[9, 30] = 1
+
+# Obtaining the A MLEs
+A.h0 = MLEdag(X.tr, D)$A.H0
+A = MLEdag(X.te)
+
+
+# Obtaining the sigma MLEs
+# TODO: Add the sigma mles and fix the MLEdag calls
+```
+
