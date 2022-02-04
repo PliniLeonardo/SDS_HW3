@@ -52,13 +52,13 @@ out=MLEdag(D_train,tau=0.3,mu=1,rho=1.2)
 # Part 2 ------------------------------------------------------------------
 
 set.seed(2018)
-p <- 50; n <- 1000;sparsity <- 2/p
+p <- 25; n <- 2000;sparsity <- 2/p
 ## generate a random lower triangular adjacnecy matrix
 A <- matrix(rbinom(p*p, 1, sparsity)*sign(runif(p*p, -1, 1))*runif(p*p, 0.7, 1), p, p)
 A[upper.tri(A, diag=TRUE)] <- 0
 
 ## num of edges in A
-sum(A != 0) # 43
+sum(A != 0) # 26
 ## data matrix
 X <- matrix(rnorm(n*p), n, p) %*% t(solve(diag(p) - A))
 
@@ -86,7 +86,7 @@ loglikelihood=function(A,sigma_square,X){
 
 #generate D matrix 
 #number of hyphothesized edges
-q=43
+q=20
 D <- matrix(0, p, p)
 index1=sample(1:p,q,replace=TRUE)
 index2=sample(1:p,q,replace=TRUE)
@@ -127,11 +127,99 @@ likelihood_uncostrained=exp(maximum_value_l_uncostrained)
 U=likelihood_uncostrained/likelihood_costrained
 
 #Comment
-# U=35.95, so for alpha=0.05, we reject the null hypothesis
+# U=1, so for alpha=0.05, we can not reject the null hypothesis
 
 # Part 3 ------------------------------------------------------------------
 
 #SIZE
 
+#proportion of rejections we get by applying our test on M dataset generated from
+#a model compatible with H0=A[j,k]=0 for all (j,k) belong to F
+
+### Parameters
+set.seed(2018)
+p <- 25
+n <- 200
+M <- 1000
+
+### H0: F = { (p,2),(2,2) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[p,2] = 1
+D[2,2] = 1
+
+### Adjacency Matrix >> Hub
+# All connected to 1, NO EDGE between p-2 >> **COMPATIBLE** with H0
+A      <- matrix(0, p, p)     
+A[, 1] <- sign( runif( p, min = -1, max = 1 ) )
+A[1,1] <- 0
+
+# Simulation --------------------------------------------------------------
+
+p_bar <- FALSE # progress-bar yes/no?
+if (p_bar){
+  # install.packages("svMisc")  
+  suppressMessages( require(svMisc, quietly = T ) ); ?progress
+}
+
+str_time <- Sys.time()
+cont=0
+pval <- rep(NA, M)
+for(i in 1:M) {
+  X   <- matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A) )
+  out <- MLEdag(X = X, D = D, tau = 0.35, mu = 1, 
+                rho = 1.2, trace_obj = FALSE)
+  pval[i] <- out$pval
+  if (pval[i]<0.05) cont=cont+1
+  if (p_bar) progress(i, M)
+}
+stp_time <- Sys.time()
+stp_time - str_time
+
+cat('alpha is equal to ', cont/M)
+# Take a look: (M = 1000, n = 200)
+# Are we simulating under H0 as expected here? 
+# If so, the pval should be Unif(0,1)
+
+hist(pval, prob = T, border = "white")  # close enough!
+abline(h = 1, lty = 2, col = "red")
+mean(pval < 0.05)   # proportion under 0.05
+mean(pval < 0.01)   # proportion under 0.01
 
 
+# POWER -------------------------------------------------------------------
+#Beta= the probability of failing to reject the null hypothesis when the null 
+# hypothesis is false
+
+### H0: F = {(,2) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[,2] = 1
+
+### Adjacency Matrix >> Hub
+# All connected to 1, NO EDGE between p-2 >> ** NOT COMPATIBLE** with H0
+A      <- matrix(0, p, p)     
+A[, 2] = sign( runif( p, min = -1, max = 1 ) )
+
+str_time <- Sys.time()
+cont=0
+pval <- rep(NA, M)
+for(i in 1:M) {
+  X   <- matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A) )
+  out <- MLEdag(X = X, D = D, tau = 0.35, mu = 1, 
+                rho = 1.2, trace_obj = FALSE)
+  pval[i] <- out$pval
+  # we fail to reject if pval>0.05
+  if (pval[i]>0.05) cont=cont+1
+  if (p_bar) progress(i, M)
+}
+stp_time <- Sys.time()
+stp_time - str_time
+
+cat('1-Beta is equal to ', 1-cont/M)
+# Take a look: (M = 1000, n = 200)
+# Are we simulating under H0 as expected here? 
+# If so, the pval should be Unif(0,1)
+
+hist(pval, prob = T, border = "white")  # close enough!
+abline(h = 1, lty = 2, col = "red")
+mean(pval < 0.05)   # proportion under 0.05
+mean(pval < 0.01)   # proportion under 0.01
