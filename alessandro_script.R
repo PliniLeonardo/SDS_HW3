@@ -1,3 +1,9 @@
+# MLEs and hypothesis -----------------------------------------------------
+
+
+
+
+# likelihood and sigma estimation -----------------------------------------
 log_likeihood = function(X, A, sigma.square){
   #The formula is: tot = -(sum(middle/const1 + const2))
   # where middle = sum((i-th row of X - inner)^2)
