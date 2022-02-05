@@ -35,7 +35,7 @@ Let's see it in code:
 
 
 ```{r}
-log_likeihood = function(X, A, sigma.square){
+log_likelihood = function(X, A, sigma.square){
   
   tot = 0
   n = dim(X)[1]
@@ -50,6 +50,7 @@ log_likeihood = function(X, A, sigma.square){
     middle = sum((X[, j] - inners)^2)  # as a matter of fact in the middle we are working on the j-th columns
     tot = tot - (middle/(2*sigma.square) + (n/2*log(sigma.square)))
   }
+  return(tot)
 }
 ```
 
@@ -57,14 +58,16 @@ Since MLEdag computes for us the estimate of the matrix $\mathbb{A}$ and the mat
 
 ```{r}
 sigma.MLE = function(X, A)
-  out_costrained=optim(
-                par=c(1),
-                fn=function(sigma.sq)
-                  log_likeihood(X,A, sigma.square),
-                method=c("Brent"),
-                lower = 0,
-                upper = 10000,
-                control = list(fnscale = -1)
+  return(
+    optim(
+      par=c(0.01),
+      fn=function(sigma.sq)
+        log_likelihood(X,A, sigma.sq),
+      method=c("Brent"),
+      lower = 0,
+      upper = 10000,
+            control = list(fnscale = -1)
+    )
   )
 ```
 
@@ -96,13 +99,27 @@ Let's now generate our observation $\mathbb{X}$ using an adiacency matrix $\math
 n = 100
 p = 10
 
-# Generating the hidden Adiacency matrix
+generate.X = function(p, n, A=NULL, D=NULL, h0=T, linkages=T){
+  # If A is not provided I'll generate it accordingly to eventual links and hypotesis sake
+  if(is.null(A)){
+    A.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+    A.hidden[upper.tri(A.hidden, diag = T)] = 0
+    if(!is.null(D))
+      if(h0)
+        A[D==1] = 1-as.integer(linkages) #A[j,k] = 0 for ALL linkages in F if we want to test the linkages, else 1
+      else
+        A[sample(which(D==1), sample(sum(D==1), 1))] = as.integer(linkages) #A[j,k] = 0 for ALL the links in F if we are NOT testing the linkages
+  }
+  
+  
+    
+}
+# Generating the hidden Adaicency matrix
 A.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
 A.hidden[upper.tri(A.hidden, diag = T)] = 0
-A.hidden[1, 2] = 1
-A.hidden[3, 6] = 1
-A.hidden[9, 30] = 1
-A.hidden[200, 249] = 1
+A.hidden[2, 1] = 1
+A.hidden[6, 3] = 1
+A.hidden[10, 9] = 1
 
 # X is generated gaussian mantaining the dependencies described by the adiacency matrix A
 X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.hidden) ) 
@@ -135,27 +152,60 @@ Since we have the log likelihood, we can easily transform our disequality into a
   &\iff \mathcal{\ell}(\hat{\theta}^{te} | \mathbb{X}^{tr}) - \mathcal{\ell}(\hat{\theta}_0^{tr} | \mathbb{X}^{tr}) \gt - ln(\alpha)
 \end{align}
 
-Suppose that we have the following set of linkages of which we want to test the existence: $\mathcal{F}=\{  (1, 2), (3, 6), (9, 30)\}$
+Suppose that we have the following set of linkages of which we want to test the existence: $\mathcal{F}=\{  (2, 1), (6, 3), (10, 9)\}$
 So our $H_0$ is **any** $\mathbb{A}$ such that **all** the tuples in $\mathcal{F}$ have a zero in $\mathbb{A}$.<br>
-This can be computed using MLEdag and passing a mask matrix of size $(p \times p)$ that has all zeros and has ones only in the position of the linkages for which we want to build the test.
+This can be computed using MLEdag and passing a mask matrix of size $(p \times p)$ that has all zeros and has ones only in the position of the linkages for which we want to build the test, the unconstrained $\mathbb{A}$ matrix is the one obtained by MLEdag without passing any constraint over the edges (matrix D). So we'll compute the two version of the $\mathbb{A}$ matrix and we'll compute the relatives $\sigma^2$. In the following cell we show also that the two ways to compute $\sigma^2$ starting from $\mathbb{A}$ and $\mathbb{X}$ are equivalent.
 ```{r}
-
 #Splitting the observations into test and train
-X.tr = X[1:n%/%2,]
-X.te = X[n%/%2+1:n,]
+X.tr = X[1:(n%/%2),]
+X.te = X[(n%/%2+1):n,]
 
 # Building the mask matrix D
 D = matrix(0, p, p)
-D[1, 2] = 1
-D[3, 6] = 1
-D[9, 30] = 1
+D[2, 1] = 1
+D[6, 3] = 1
+D[10, 9] = 1
 
 # Obtaining the A MLEs
-A.h0 = MLEdag(X.tr, D)$A.H0
-A = MLEdag(X.te)
+A.h0 = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
+                    rho = 1.2, trace_obj = FALSE)$A.H0
+A = MLEdag(X = X, tau = 0.35, mu = 1, 
+                    rho = 1.2, trace_obj = FALSE)$A
 
 
 # Obtaining the sigma MLEs
 # TODO: Add the sigma mles and fix the MLEdag calls
+sigma.h0 = sigma.estimator(X.tr, A.h0)
+sigma.h0.mle = sigma.MLE(X.tr, A.h0)
+
+sigma.unconstrained.mle = sigma.MLE(X.te, A)
+sigma.unconstrained = sigma.estimator(X.te, A)
+
+comparison = matrix(c(sigma.h0, sigma.h0.mle$par, sigma.unconstrained, sigma.unconstrained.mle$par), nrow=2, byrow=T)
+colnames(comparison) = c('Proxy', 'MLE estimate')
+```
+
+
+```{r}
+data.frame(comparison)
+```
+Now that we have $\hat{\theta}_0^{tr}$ and $\hat{\theta}^{te}$ we can compute $U_n$. Since it is the ratio of two likelihoods, its logarithm can be computed as the difference between two log-likelihood, so we'll do the exponential of this difference.
+```{r}
+U_n = exp(log_likelihood(X.tr, A, sigma.unconstrained)-log_likelihood(X.tr, A.h0, sigma.h0))
+U_n
+```
+### Putting all togheter
+Since the value of $U_n$ depends on the sample X and on the linkages that we want to test, we can wrap all these steps into a unique function that gives us the value of $U_n$ and this is useful to make some statistic on it (point 3 of the homework).
+
+```{r}
+U_n.linkages = function(X, D){
+  A.h0 = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
+                    rho = 1.2, trace_obj = FALSE)$A.H0
+  A = MLEdag(X = X, tau = 0.35, mu = 1, 
+                   rho = 1.2, trace_obj = FALSE)$A
+  sigma.h0 = sigma.estimator(X.tr, A.h0)
+  sigma.unconstrained = sigma.estimator(X.te, A)
+  return(exp(log_likelihood(X.tr, A, sigma.unconstrained)-log_likelihood(X.tr, A.h0, sigma.h0)))
+}
 ```
 
