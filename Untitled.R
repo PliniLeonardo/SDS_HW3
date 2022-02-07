@@ -14,7 +14,7 @@ A[upper.tri(A, diag=TRUE)] <- 0
 sum(A != 0) # 26
 ## data matrix
 X <- matrix(rnorm(n*p), n, p) %*% t(solve(diag(p) - A))
-'''
+
 #Loglikelihood
 loglikelihood=function(A,sigma_square,X){
   n=ncol(X)
@@ -37,7 +37,7 @@ loglikelihood=function(A,sigma_square,X){
   return(-tot)
 }
 '''
-Log_likelihood = function(X, A, sigma.square){
+log_likelihood = function(X, A, sigma.square){
   #The formula is: tot = -(sum(middle/const1 + const2))
   # where middle = sum((i-th row of X - inner)^2)
   #  where inner= sum(j-th row of A \ j-th col * i-th row of X \ j-th col)
@@ -55,9 +55,22 @@ Log_likelihood = function(X, A, sigma.square){
     tot = tot - (middle/(2*sigma.square) + (n/2*log(sigma.square)))
   }
 }
+'''
+sigma.estimator = function(X, A){
+  n = dim(X)[1]
+  p = dim(X)[2]
+  sigma = 0
+  for(j in 1:p){
+    K = which((1:p)!=j)
+    inners = apply(X[, K] * A[j, K], 1, sum)
+    sigma = sigma + sum((X[,j]-inners)^2)
+  }
+  return(sigma/(n*p))
+}
 
 #generate D matrix 
 #number of hyphothesized edges
+'''
 q=20
 D <- matrix(0, p, p)
 index1=sample(1:p,q,replace=TRUE)
@@ -65,7 +78,13 @@ index2=sample(1:p,q,replace=TRUE)
 for (i in 1:q){
   D[index1[i],index2[i]]=1
 }
+'''
 
+D = matrix(0, p, p)
+D[2, 1] = 1
+D[6, 3] = 1
+D[10, 9] = 1
+'''
 #MLEdag method to recover A.H0 and A.H1
 out=MLEdag(X=X,D=D,tau=0.3, mu=1, rho=1.2)
 A_costrained=out$A.H0
@@ -100,8 +119,20 @@ U=likelihood_uncostrained/likelihood_costrained
 
 #Comment
 # U=1, so for alpha=0.05, we can not reject the null hypothesis
+'''
 
 # Part 3 ------------------------------------------------------------------
+
+U_n.linkages = function(X, D){
+  A.h0 = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
+                rho = 1.2, trace_obj = FALSE)$A.H0
+  A = MLEdag(X = X, tau = 0.35, mu = 1, 
+             rho = 1.2, trace_obj = FALSE)$A
+  sigma.h0 = sigma.estimator(X.tr, A.h0)
+  sigma.unconstrained = sigma.estimator(X.te, A)
+  return(exp(loglikelihood( A, sigma.unconstrained,X.tr))/ exp(loglikelihood( A.h0, sigma.h0,X.tr)))
+}
+
 
 #SIZE
 
@@ -135,13 +166,15 @@ if (p_bar){
 
 str_time <- Sys.time()
 cont=0
-pval <- rep(NA, M)
+alpha=0.05
+ris <- rep(NA, M)
 for(i in 1:M) {
   X   <- matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A) )
-  out <- MLEdag(X = X, D = D, tau = 0.35, mu = 1, 
-                rho = 1.2, trace_obj = FALSE)
-  pval[i] <- out$pval
-  if (pval[i]<0.05) cont=cont+1
+  X.tr = X[1:(n%/%2),]
+  X.te = X[(n%/%2+1):n,]
+  ris[i]=U_n.linkages(X,D)
+  
+  if (ris[i]>(1/alpha)) cont=cont+1
   if (p_bar) progress(i, M)
 }
 stp_time <- Sys.time()
@@ -164,34 +197,32 @@ mean(pval < 0.01)   # proportion under 0.01
 
 ### H0: F = {(,2) }, and A[F] = 0
 D <- matrix(0, p, p)
-D[,2] = 1
+D[,1] = 1
+D[,10] = 1
+D[,20] = 1
 
 ### Adjacency Matrix >> Hub
 # All connected to 1, NO EDGE between p-2 >> ** NOT COMPATIBLE** with H0
-A      <- matrix(0, p, p)     
-A[, 2] = sign( runif( p, min = -1, max = 1 ) )
+A      <- matrix(0, p, p) 
+A[, 1] = sign( runif( p, min = -1, max = 1 ) )
+A[, 10] = sign( runif( p, min = -1, max = 1 ) )
+A[, 20] = sign( runif( p, min = -1, max = 1 ) )
 
 str_time <- Sys.time()
 cont=0
-pval <- rep(NA, M)
+M=10
+ris <- rep(NA, M)
 for(i in 1:M) {
   X   <- matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A) )
-  out <- MLEdag(X = X, D = D, tau = 0.35, mu = 1, 
-                rho = 1.2, trace_obj = FALSE)
-  pval[i] <- out$pval
-  # we fail to reject if pval>0.05
-  if (pval[i]>0.05) cont=cont+1
+  #X.tr = X[1:(n%/%2),]
+  #X.te = X[(n%/%2+1):n,]
+  ris[i]=U_n.linkages(X,D)
+  
+  # we fail to reject if Un<(1/0.05)
+  if (ris[i]<(1/0.05)) cont=cont+1
   if (p_bar) progress(i, M)
 }
 stp_time <- Sys.time()
 stp_time - str_time
 
 cat('1-Beta is equal to ', 1-cont/M)
-# Take a look: (M = 1000, n = 200)
-# Are we simulating under H0 as expected here? 
-# If so, the pval should be Unif(0,1)
-
-hist(pval, prob = T, border = "white")  # close enough!
-abline(h = 1, lty = 2, col = "red")
-mean(pval < 0.05)   # proportion under 0.05
-mean(pval < 0.01)   # proportion under 0.01
