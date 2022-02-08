@@ -36,7 +36,7 @@ Let's see it in code:
 
 ```{r}
 log_likelihood = function(X, A, sigma.square){
-  
+  #cat('log_likelihood from A: ', dim(A),' sigma: ', sigma.square)
   tot = 0
   n = dim(X)[1]
   p = dim(X)[2]
@@ -98,32 +98,58 @@ Let's now generate our observation $\mathbb{X}$ using an adiacency matrix $\math
 # Suppose to have 100 observation of 10 random variables
 n = 100
 p = 10
+sparsity <- 1/p
 
 generate.X = function(p, n, A=NULL, D=NULL, h0=T, linkages=T){
   # If A is not provided I'll generate it accordingly to eventual links and hypotesis sake
   if(is.null(A)){
-    A.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
-    A.hidden[upper.tri(A.hidden, diag = T)] = 0
+    A = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+    A[upper.tri(A, diag = T)] = 0
     if(!is.null(D))
       if(h0)
         A[D==1] = 1-as.integer(linkages) #A[j,k] = 0 for ALL linkages in F if we want to test the linkages, else 1
-      else
+      else{
         A[sample(which(D==1), sample(sum(D==1), 1))] = as.integer(linkages) #A[j,k] = 0 for ALL the links in F if we are NOT testing the linkages
+        cat('for invalidate h0 A has in positions', which(D==1), ' ', sum(A[which=D==1]), ' ones')
+      }
   }
-  
-  
-    
+
+  return(matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A)))
 }
+
 # Generating the hidden Adaicency matrix
 A.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
 A.hidden[upper.tri(A.hidden, diag = T)] = 0
-A.hidden[2, 1] = 1
-A.hidden[6, 3] = 1
-A.hidden[10, 9] = 1
+A.hidden[2, 1] = 0
+A.hidden[6, 3] = 0
+A.hidden[10, 9] = 0
 
 # X is generated gaussian mantaining the dependencies described by the adiacency matrix A
 X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.hidden) ) 
+#X =generate.X(p, n, D=D, h0=T, linkages = T)
+U_n.linkages(X, D)
 
+```
+```{r}
+library(cli)
+```
+
+
+```{r}
+library(cli)
+library(clrdag)
+set.seed(2019)
+m = 1e2
+out = rep(NA, m)
+cli_progress_bar("Cleaning data", total = m)
+for(i in 1:m){
+  X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.hidden) )
+  Un= U_n.linkages(X, D)
+  out[i] = (Un>-log(0.05))
+  cli_progress_update()
+}
+cli_progress_done()
+sum(out)/m
 ```
 
 We've said that A is unknown, so if we want to test the existence of some link in the Dag or some specific pathway we can't look into it, so we need a test.
@@ -156,15 +182,17 @@ Suppose that we have the following set of linkages of which we want to test the 
 So our $H_0$ is **any** $\mathbb{A}$ such that **all** the tuples in $\mathcal{F}$ have a zero in $\mathbb{A}$.<br>
 This can be computed using MLEdag and passing a mask matrix of size $(p \times p)$ that has all zeros and has ones only in the position of the linkages for which we want to build the test, the unconstrained $\mathbb{A}$ matrix is the one obtained by MLEdag without passing any constraint over the edges (matrix D). So we'll compute the two version of the $\mathbb{A}$ matrix and we'll compute the relatives $\sigma^2$. In the following cell we show also that the two ways to compute $\sigma^2$ starting from $\mathbb{A}$ and $\mathbb{X}$ are equivalent.
 ```{r}
-#Splitting the observations into test and train
-X.tr = X[1:(n%/%2),]
-X.te = X[(n%/%2+1):n,]
-
 # Building the mask matrix D
+library(clrdag)
 D = matrix(0, p, p)
 D[2, 1] = 1
 D[6, 3] = 1
 D[10, 9] = 1
+
+#X = generate.X(p, n, D = D, h0=T, linkages = T)
+#Splitting the observations into test and train
+X.tr = X[1:(n%/%2),]
+X.te = X[(n%/%2+1):n,]
 
 # Obtaining the A MLEs
 A.h0 = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
@@ -174,7 +202,6 @@ A = MLEdag(X = X, tau = 0.35, mu = 1,
 
 
 # Obtaining the sigma MLEs
-# TODO: Add the sigma mles and fix the MLEdag calls
 sigma.h0 = sigma.estimator(X.tr, A.h0)
 sigma.h0.mle = sigma.MLE(X.tr, A.h0)
 
@@ -188,9 +215,9 @@ colnames(comparison) = c('Proxy', 'MLE estimate')
 
 ```{r}
 data.frame(comparison)
-```
+``` 
 Now that we have $\hat{\theta}_0^{tr}$ and $\hat{\theta}^{te}$ we can compute $U_n$. Since it is the ratio of two likelihoods, its logarithm can be computed as the difference between two log-likelihood, so we'll do the exponential of this difference.
-```{r}
+```{r}()
 U_n = exp(log_likelihood(X.tr, A, sigma.unconstrained)-log_likelihood(X.tr, A.h0, sigma.h0))
 U_n
 ```
@@ -199,13 +226,82 @@ Since the value of $U_n$ depends on the sample X and on the linkages that we wan
 
 ```{r}
 U_n.linkages = function(X, D){
-  A.h0 = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
-                    rho = 1.2, trace_obj = FALSE)$A.H0
-  A = MLEdag(X = X, tau = 0.35, mu = 1, 
-                   rho = 1.2, trace_obj = FALSE)$A
+  n = dim(X)[0]
+  X.tr = X[1:(n%/%2),]
+  X.te = X[(n%/%2+1):n,]
+  
+  tmp = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
+                    rho = 1.2, trace_obj = FALSE)
+  A.h0 = tmp$A.H0
+  #A = tmp$A.H1
+  A = MLEdag(X = X.te, tau = 0.35, mu = 1,rho = 1.2, trace_obj = FALSE)$A
+  
   sigma.h0 = sigma.estimator(X.tr, A.h0)
   sigma.unconstrained = sigma.estimator(X.te, A)
-  return(exp(log_likelihood(X.tr, A, sigma.unconstrained)-log_likelihood(X.tr, A.h0, sigma.h0)))
+  
+  return(log_likelihood(X.tr, A, sigma.unconstrained)-log_likelihood(X.tr, A.h0, sigma.h0))
 }
+```
+
+
+```{r}
+U_n.path= function(X, D){
+  n = dim(X)[1]
+  X.tr = X[1:(n%/%2),]
+  X.te = X[(n%/%2+1):n,]
+  
+  # Computing all the A.h0 over the sparsity parameters 'k'
+  A.h0s  = lapply(1:sum(D), function(mu)MLEdag(X.tr, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F)$A.H0)
+  # For each A.h0 compute the associated sigma
+  sigmas = t(sapply(A.h0s, function(a)sigma.estimator(X.tr, a)))
+  # Computing the likelihoods of each pair (A.h0, sigma.h0)
+  likelihoods = t(sapply(1:length(sigmas), function(idx)log_likelihood(X.tr, A.h0s[[idx]], sigmas[idx])))
+  
+  # Finding the idx that give us the maximum likelihood
+  mle_idx = which(likelihoods==max(likelihoods))[1] # maximum likelihood over h0
+  
+  A= MLEdag(X = X.te, tau = 0.35, mu = 1, 
+                  rho = 1.2, trace_obj = FALSE)$A
+  sigma.unconstrained = sigma.estimator(X.te, A)
+  
+  return(list(U.n=exp(log_likelihood(X.tr, A, sigma.unconstrained)-likelihoods[mle_idx]), A.h0=A.h0s[[mle_idx]]))
+}
+```
+
+
+```{r}
+library(clrdag)
+D.pathway = matrix(0, p,p)
+D.pathway[4,3]=1
+D.pathway[5,4]=1
+D.pathway[6,5]=1
+D.pathway[7,6]=1
+
+A.pathway.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A.pathway.hidden[upper.tri(A.hidden, diag = T)] = 0
+A.pathway.hidden[4,3]=0
+A.pathway.hidden[5,4]=1
+A.pathway.hidden[6,5]=1
+A.pathway.hidden[7,6]=1
+X.pathway = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden))
+#X.pathway = generate.X(p, n, D=D, h0=F, linkages = F)
+out= U_n.path(X.pathway, D.pathway)
+abs(out$A.h0-A.hidden)
+out$U.n
+```
+
+```{r}
+library(cli)
+m = 1e2
+out = rep(NA, m)
+cli_progress_bar("Cleaning data", total = m)
+for(i in 1:m){
+  X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden) )
+  Un= U_n.path(X, D.pathway)$U.n
+  out[i] = (Un>20)
+  cli_progress_update()
+}
+cli_progress_done()
+sum(out)/m
 ```
 
