@@ -5,9 +5,9 @@ output: html_notebook
 
 We have a sampling of $n$ independent observation from a gaussian *joint* distribution of dimension $p$. These data are stored into a matrix $\mathbb{X} \in \mathbb{R}^{n\times p}$.<br>
 
-Given the matrix we want to discover the unknown adiacency matrix that models the DAG of the joint distribution that has generated our observations.
+Given the matrix we want to get more clues about the unknown adiacency matrix that models the DAG of the joint distribution that has generated our observations.
 
-This matrix is $\mathbb{A}$ and it's a lower triangular matrix that belongs to $\mathbb{R}^{p\times p}$ and it's such that it has a 0 in the position $(i,j)$ if $j \not\in pa(X_i)$ else the value means the strenght of the relation between these two nodes.<br>
+This matrix is $\mathbb{A}$ and it's a lower triangular matrix that belongs to $\mathbb{R}^{p\times p}$ and it's such that it has a 0 in the position $(i,j)$ if $j \not\in pa(X_i)$ else the value represents the strength of the relationship that involves the two nodes.<br>
 
 We know how to model our observation, we know what $\mathbb{A}$ means, but how can we link the distribution of the j-th random variable (remember that we have a p-dimensional random vector) to the matrix $\mathbb{A}$?<br>
 Well we can say that the j-th random variable $X_j$ can be computed as follows:
@@ -27,32 +27,31 @@ In order to do this we can use the log likelihood that's defined as follows:
 Let's enroll it:
 We have three sums that are, going from the inner to the outer:
 
-* *inner*: $\sum_{k | k\neq j} \mathbb{A}[j,k]\cdot \mathbb{X}[i,k]$ where we are doing the dot product from the weight that has the eventual edge that goes from $k$ to $j$ (scalar) and the value of the k-th random variable ($X_k$) in the i-th sample, than we sum all these values. This can be seen as a kind of a weighted sum of the i-th sample where the weights are the influences that has the variable j to the other random variables. So it can be seen as a "how much j has influenced in total the sample $i$"
-* *middle*: $\sum_{i=1}^n \left( \mathbb{X}[i,j] - \text{inner}\right )^2$ where for each of the i-th observation of the j-th random variable, we subtract the sum obtained in the inner that is a scalar, than we sum all these values. We are subtracting the value of the j-th random variable in the sample i with the influence that has had this variable over the other variable, than we do the square of this difference, so it's hight either if $X_j$ have a big value in the i-th sample without influencing too much the other variable, or if the variable has a low value (maybe negative) and has a big influence on the other ones
+* *inner*: $\sum_{k \in [1,p] \setminus j} \mathbb{A}[j,k]\cdot \mathbb{X}[i,k]$ where we are doing the dot product from the weight that has the eventual edge that goes from $k$ to $j$ (scalar) and the value of the k-th random variable ($X_k$) in the i-th sample, than we sum all these values. This can be seen as a kind of a weighted sum of the i-th sample where the weights are the influences that all the other random variables have over the k-th one. So it can be seen as a "how much j is influenced by the other variables in the sample $i$"
+* *middle*: $\sum_{i=1}^n \left( \mathbb{X}[i,j] - \text{inner}\right )^2$ where for each of the i-th observation of the j-th random variable, we subtract the sum obtained in the inner that is a scalar, than we sum all these values. We are subtracting the value of the j-th random variable in the sample i with the influence that the other random variables have had on $j$, so we can see it as 'how much j is distant from the value that should have accordingly with the other variables', than we do the square of this difference. It can be interpretated as the euclidean distance from the vector of the n samples of j and the vector of the influences of all the other variables (the value that should have) over j.
 * *outer*: $\sum_{j=1}^p \frac{\text{middle}}{2\sigma^2} + \frac{n}{2}ln\sigma^2$ We sums up the value obtained from all the $p$ random variables multiplicated and summed with constants that are dependent from $\sigma^2$
 
 Let's see it in code:
 
 
 ```{r}
-log_likelihood = function(X, A, sigma.square){
-  #cat('log_likelihood from A: ', dim(A),' sigma: ', sigma.square)
-  tot = 0
-  n = dim(X)[1]
-  p = dim(X)[2]
-  for(j in 1:p){
-    
-    # Finding the indexes K = {k s.t. k is in [1,p]\j}
+
+compute.middle = function(j, p){
+  # Finding the indexes K = {k s.t. k is in [1,p]\j}
     K = which((1:p)!=j)
     # in k we have the indexes of the row without j
-      
+    
     inners = apply(X[, K] * A[j, K], 1, sum) # n length vector containing the inner sums for each i-th sample
-    middle = sum((X[, j] - inners)^2)  # as a matter of fact in the middle we are working on the j-th columns
-    tot = tot - (middle/(2*sigma.square) + (n/2*log(sigma.square)))
-  }
-  return(tot)
+    middle = sum((X[, j] - inners)^2)  # as a matter of fact in the middle we are working on the j-th column
+    return(middle)
 }
+
+vectorized_log_likelihood = function(X, A, sigma.square)
+  return(-sum(sapply(1:p, function(j) (compute.middle(j,p)/(2*sigma.square)+(n/2*log(sigma.square))))))
+
+
 ```
+
 
 Since MLEdag computes for us the estimate of the matrix $\mathbb{A}$ and the matrix $\mathbb{X}$ is what we have given that it's our observation, we can optimize the log likelihood in order to retrieve sigma, so it'll be the sigma.MLE
 
@@ -82,206 +81,34 @@ In code we have:
 sigma.estimator = function(X, A){
   n = dim(X)[1]
   p = dim(X)[2]
-  sigma = 0
-  for(j in 1:p){
-    K = which((1:p)!=j)
-    inners = apply(X[, K] * A[j, K], 1, sum)
-    sigma = sigma + sum((X[,j]-inners)^2)
-  }
-  return(sigma/(n*p))
-}
-```
-
-Back to our business... We have a way to estimate $\mathbb{A}$ by the clrdag library's function MLEdag and, once we have it we can now compute $\sigma^2$ in the two way of above.
-Let's now generate our observation $\mathbb{X}$ using an adiacency matrix $\mathbb{A}$ that for the moment we suppose to be **unknown**:
-```{r}
-# Suppose to have 100 observation of 10 random variables
-n = 100
-p = 10
-sparsity <- 1/p
-
-generate.X = function(p, n, A=NULL, D=NULL, h0=T, linkages=T){
-  # If A is not provided I'll generate it accordingly to eventual links and hypotesis sake
-  if(is.null(A)){
-    A = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
-    A[upper.tri(A, diag = T)] = 0
-    if(!is.null(D))
-      if(h0)
-        A[D==1] = 1-as.integer(linkages) #A[j,k] = 0 for ALL linkages in F if we want to test the linkages, else 1
-      else{
-        A[sample(which(D==1), sample(sum(D==1), 1))] = as.integer(linkages) #A[j,k] = 0 for ALL the links in F if we are NOT testing the linkages
-        cat('for invalidate h0 A has in positions', which(D==1), ' ', sum(A[which=D==1]), ' ones')
-      }
-  }
-
-  return(matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A)))
+  return(sum(sapply(1:p, function(j)compute.middle(j, p)))/(n*p))
 }
 
-# Generating the hidden Adaicency matrix
-A.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
-A.hidden[upper.tri(A.hidden, diag = T)] = 0
-A.hidden[2, 1] = 0
-A.hidden[6, 3] = 0
-A.hidden[10, 9] = 0
-
-# X is generated gaussian mantaining the dependencies described by the adiacency matrix A
-X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.hidden) ) 
-#X =generate.X(p, n, D=D, h0=T, linkages = T)
-U_n.linkages(X, D)
-
 ```
 
+## Constrained Likelihood Ratio Test
+Since we can now approximate sigma and $\mathbb{A}$ starting from $\mathbb{X}$, we can now run a constrained likelihood ratio test, in order to test the existence of directed links between specific nodes or directed pathways.<br>
+The choice to reject the $H_0$ hypothesis in the two tests are made basing on one of these two values:
+
+* $U_n$ for the **split** likelihood ratio
+* $W_n$ for the **cross-fit** likelihood ratio
+
+The main idea behind the computation of these two metrics is that when we want the **constrained version** of $\mathbb{A}$ we'll pass into the ```MLEdag``` function the observation matrix, a matrix $D$ that is the matrix representation of the set of linkages $F$ and is such that has 1 only in the coordinates $(i, j) \in F$ and some other numerical parameters. We'll compute over the entire observation the estimate of $\mathbb{A}$ with this function and we'll take the A.H0 result for the constrained version and A.H1 for the unconstrained one.<br>
+Once we've the $\mathbb{A}$ matrices it's trivial to find the estimates for the $\sigma^2$ simply using the function ```sigma.estimator``` described above. In this specific case we'll compute these estimates over the training part of $
+\mathbb{X}$ for the **constrained version** and over the test part for the other one.<br>
+At this point we've $\hat{\theta}_0^{tr}$ and $\hat{\theta}^{te}$ for compute the $U_n$ value and, conseguently, the $W_n$, but in both cases we'll use their *logarithmic version*.
 
 
-We've said that A is unknown, so if we want to test the existence of some link in the Dag or some specific pathway we can't look into it, so we need a test.
-
-## Test the linkages in X
-If we want to see if a set of linkages $\mathcal{F} = \{(j,k)\}$ belongs to the Graph we can set up a test over $\mathbb{A}$ where:
-\begin{equation}
-  H_0 : \mathbb{A}[j,k] = 0 \forall (j,k) \in \mathcal{F}
-\end{equation}
-Once we have this, we can split \mathbb{X} in train and set, in the train half of observation we'll compute the **constrained** MLEs for $\mathbb{A}$ and $\sigma^2$ accordingly to $H_0$, namely $\hat{\theta}_0^{tr}$, instead with the testing half of our observation we'll compute the **unconstrained** MLEs, namely $\hat{\theta}^{te}$.
-
-In order to do this we must compute:
-* $\hat{\theta}_0^{tr} = (\hat{\mathbb{A}}_0, \hat{\sigma}_0)$
-* $\hat{\theta}^{te} = (\hat{\mathbb{A}}, \hat{\sigma})$
-
-Given these ingredients we can substitute these thetas into the likelihoods and obtain the **split Likelihood ratio**:
-\begin{equation}
-  U_n = \frac{\mathcal{L}(\hat{\theta}^{te} | \mathbb{X}^{tr})}{\mathcal{L}(\hat{\theta}_0^{tr} | \mathbb{X}^{tr})}
-\end{equation}
-**IF** $U_n \gt \frac{1}{\alpha}$ then we can **reject** $H_0$.<br>
-
-Since we have the log likelihood, we can easily transform our disequality into a more manageable form:
-\begin{align}
-  &U_n > \frac{1}{\alpha}\\
-  &\iff \frac{\mathcal{L}(\hat{\theta}^{te} | \mathbb{X}^{tr})}{\mathcal{L}(\hat{\theta}_0^{tr} | \mathbb{X}^{tr})} \gt \frac{1}{\alpha}\\
-  &\iff \mathcal{\ell}(\hat{\theta}^{te} | \mathbb{X}^{tr}) - \mathcal{\ell}(\hat{\theta}_0^{tr} | \mathbb{X}^{tr}) \gt - ln(\alpha)
-\end{align}
-
-Suppose that we have the following set of linkages of which we want to test the existence: $\mathcal{F}=\{  (2, 1), (6, 3), (10, 9)\}$
-So our $H_0$ is **any** $\mathbb{A}$ such that **all** the tuples in $\mathcal{F}$ have a zero in $\mathbb{A}$.<br>
-This can be computed using MLEdag and passing a mask matrix of size $(p \times p)$ that has all zeros and has ones only in the position of the linkages for which we want to build the test, the unconstrained $\mathbb{A}$ matrix is the one obtained by MLEdag without passing any constraint over the edges (matrix D). So we'll compute the two version of the $\mathbb{A}$ matrix and we'll compute the relatives $\sigma^2$. In the following cell we show also that the two ways to compute $\sigma^2$ starting from $\mathbb{A}$ and $\mathbb{X}$ are equivalent.
-```{r}
-# Building the mask matrix D
-library(clrdag)
-D = matrix(0, p, p)
-D[2, 1] = 1
-D[6, 3] = 1
-D[10, 9] = 1
-
-#X = generate.X(p, n, D = D, h0=T, linkages = T)
-#Splitting the observations into test and train
-X.tr = X[1:(n%/%2),]
-X.te = X[(n%/%2+1):n,]
-
-# Obtaining the A MLEs
-A.h0 = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
-                    rho = 1.2, trace_obj = FALSE)$A.H0
-A = MLEdag(X = X, tau = 0.35, mu = 1, 
-                    rho = 1.2, trace_obj = FALSE)$A
-
-
-# Obtaining the sigma MLEs
-sigma.h0 = sigma.estimator(X.tr, A.h0)
-sigma.h0.mle = sigma.MLE(X.tr, A.h0)
-
-sigma.unconstrained.mle = sigma.MLE(X.te, A)
-sigma.unconstrained = sigma.estimator(X.te, A)
-
-comparison = matrix(c(sigma.h0, sigma.h0.mle$par, sigma.unconstrained, sigma.unconstrained.mle$par), nrow=2, byrow=T)
-colnames(comparison) = c('Proxy', 'MLE estimate')
-```
-
+We want to highlight that for the pathway test we need also to compute not only the $\theta$ that maximizes the likelihood but also we need to find the right value of sparsity that maximize it, so there will be one more step in the computation but the main idea is the same.
 
 ```{r}
-data.frame(comparison)
-``` 
-Now that we have $\hat{\theta}_0^{tr}$ and $\hat{\theta}^{te}$ we can compute $U_n$. Since it is the ratio of two likelihoods, its logarithm can be computed as the difference between two log-likelihood, so we'll do the exponential of this difference.
-```{r}()
-U_n = exp(log_likelihood(X.tr, A, sigma.unconstrained)-log_likelihood(X.tr, A.h0, sigma.h0))
-U_n
-```
-### Putting all togheter
-Since the value of $U_n$ depends on the sample X and on the linkages that we want to test, we can wrap all these steps into a unique function that gives us the value of $U_n$ and this is useful to make some statistic on it (point 3 of the homework).
-
-```{r}
-U_n.linkages = function(X, D){
-  n = dim(X)[1]
-  X.tr = X[1:(n%/%2),]
-  X.te = X[(n%/%2+1):n,]
-  
-  tmp = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
-                    rho = 1.2, trace_obj = FALSE)
-  A.h0 = tmp$A.H0
-  A = tmp$A.H1
-  #A = MLEdag(X = X.te, tau = 0.35, mu = 1,rho = 1.2, trace_obj = FALSE)$A
-  
-  sigma.h0 = sigma.estimator(X.tr, A.h0)
-  sigma.unconstrained = sigma.estimator(X.te, A)
-  
-  return(log_likelihood(X.tr, A, sigma.unconstrained)-log_likelihood(X.tr, A.h0, sigma.h0))
-}
-```
-
-
-```{r}
-U_n.path= function(X, D){
-  n = dim(X)[1]
-  X.tr = X[1:(n%/%2),]
-  X.te = X[(n%/%2+1):n,]
-  
-  # Computing all the A.h0 over the sparsity parameters 'k'
-  A.mles = lapply(1:sum(D), function(mu)MLEdag(X.tr, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F))
-  A.h0s  = lapply(A.mles, function(a)a$A.H0)
-  A.h1s  = lapply(A.mles, function(a)a$A.H1)
-  # For each A.h0 compute the associated sigma
-  sigmas.0 = t(sapply(A.h0s, function(a)sigma.estimator(X.tr, a)))
-  sigmas.1 = t(sapply(A.h1s, function(a)sigma.estimator(X.te, a)))
-  # Computing the likelihoods of each pair (A.h0, sigma.h0)
-  likelihoods.0 = t(sapply(1:length(sigmas.0), function(idx)log_likelihood(X.tr, A.h0s[[idx]], sigmas.0[idx])))
-  likelihoods.1 = t(sapply(1:length(sigmas.1), function(idx)log_likelihood(X.tr, A.h1s[[idx]], sigmas.1[idx])))
-  
-  # Finding the idx that give us the maximum likelihood
-  mle_idx.0 = which(likelihoods.0==max(likelihoods.0))[1] # maximum likelihood over h0
-  mle_idx.1 = which(likelihoods.1==max(likelihoods.1))[1] # maximum likelihood over h0
-  
-  A= MLEdag(X = X.te, tau = 0.35, mu = 1, 
-                  rho = 1.2, trace_obj = FALSE)$A
-  sigma.unconstrained = sigma.estimator(X.te, A)
-  return (likelihoods.1[mle_idx.1]-likelihoods.0[mle_idx.0])
-  #return(list(U.n=exp(log_likelihood(X.tr, A, sigma.unconstrained)-likelihoods[mle_idx]), A.h0=A.h0s[[mle_idx]]))
-}
-```
-
-
-```{r}
-library(clrdag)
-D.pathway = matrix(0, p,p)
-D.pathway[3, 4]=1
-D.pathway[4, 5]=1
-D.pathway[5, 6]=1
-D.pathway[6, 7]=1
-
-A.pathway.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
-A.pathway.hidden[upper.tri(A.hidden, diag = T)] = 0
-A.pathway.hidden[4,3]=1
-A.pathway.hidden[5,4]=1
-A.pathway.hidden[6,5]=1
-A.pathway.hidden[7,6]=1
-X.pathway = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden))
-#X.pathway = generate.X(p, n, D=D, h0=F, linkages = F)
-out= U_n.path(X.pathway, D.pathway)
-#abs(out$A.h0-A.hidden)
-out#$U.n #log 0.05= -2.995732
-```
-
-```{r}
-inner_LRT_function.paths = function(X.tr, X.te, D){
+inner_LRT_function.paths = function(X, X.tr, X.te, D){
    
   # Computing all the A.h0 over the sparsity parameters 'k'
-  A.mles = lapply(1:sum(D), function(mu)MLEdag(X.tr, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F))
+  A.mles = lapply(1:sum(D), function(mu)MLEdag(X, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F))
+  #A.h0s = lapply(1:sum(D), function(mu)MLEdag(X.tr, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F)$A.H0)
   A.h0s  = lapply(A.mles, function(a)a$A.H0)
+  #A.h1s = lapply(1:sum(D), function(mu)MLEdag(X.te, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F)$A.H1)
   A.h1s  = lapply(A.mles, function(a)a$A.H1)
   # For each A.h0 compute the associated sigma
   sigmas.0 = t(sapply(A.h0s, function(a)sigma.estimator(X.tr, a)))
@@ -294,16 +121,12 @@ inner_LRT_function.paths = function(X.tr, X.te, D){
   mle_idx.0 = which(likelihoods.0==max(likelihoods.0))[1] # maximum likelihood over h0
   mle_idx.1 = which(likelihoods.1==max(likelihoods.1))[1] # maximum likelihood over h0
   
-  A= MLEdag(X = X.te, tau = 0.35, mu = 1, 
-                  rho = 1.2, trace_obj = FALSE)$A
-  sigma.unconstrained = sigma.estimator(X.te, A)
   return (likelihoods.1[mle_idx.1]-likelihoods.0[mle_idx.0])
   #return(list(U.n=exp(log_likelihood(X.tr, A, sigma.unconstrained)-likelihoods[mle_idx]), A.h0=A.h0s[[mle_idx]]))
 }
 
-inner_LRT_function.links = function(X.tr, X.te, D){
-  
-  tmp = MLEdag(X = X.tr, D = D, tau = 0.35, mu = 1, 
+inner_LRT_function.links = function(X, X.tr, X.te, D){
+  tmp = MLEdag(X = X, D = D, tau = 0.35, mu = 1, 
                     rho = 1.2, trace_obj = FALSE)
   A.h0 = tmp$A.H0
   A = tmp$A.H1
@@ -320,40 +143,45 @@ log.LRT = function(X,D, links=T){
   X.te = X[(n%/%2+1):n,]
   
   if(links){
-  U_n = inner_LRT_function.links(X.tr, X.te, D)
-  U_n.swap = inner_LRT_function.links(X.te, X.tr, D)
+    U_n = inner_LRT_function.links(X, X.tr, X.te, D)
+    U_n.swap = inner_LRT_function.links(X, X.te, X.tr, D)
   }
   else{
-    U_n = inner_LRT_function.paths(X.tr, X.te, D)
-    U_n.swap = inner_LRT_function.paths(X.te, X.tr, D)
+    U_n = inner_LRT_function.paths(X, X.tr, X.te, D)
+    U_n.swap = inner_LRT_function.paths(X, X.te, X.tr, D)
   }
   return(list(links = links, U_n = U_n, W_n = (log((exp(U_n)+exp(U_n.swap))/2))))
 }
 
 ```
 
-
-
+### Testing the functions
+Since we have implemented the computation of these ratios we can now test whether a sample comes from a distribution that has a specific set of linkages (or directed pathway) and when it hasn't it. In order to test our implementation we've built two functions, one for the linkages problem and one for the path. In both cases we built a linkages matrix $D$ and we create an adjacency matrix $\mathbb{A}$ that is built in function of a parameter $h0$ that indicates if we want that $\mathbb{A} \in H_0$ or not. It takes also the value of $\alpha$ in order to execute the test. As anticipated we're working on the logarithmic version of $U_n$ and $W_n$ so we'll check whether they are lower than $-log(\alpha)$. We sums up the times that we reject the null hypothesis and if we pass h0=True we'll check the percentage of False discovery that is expected to be around the value of $alpha$ (actually it should be lower than it but since it's a new and experimental way to make this kind of tests, it's acceptable if we've not the perfection in our results.). We can also check the percentage of true negative passing h0=False.
 
 ```{r}
 library(cli)
 library(clrdag)
-test_path = function(m=1e2,h0=T, alpha = 0.05){
+test_path = function(m=1e2,h0=T, alpha = .05){
+  # matrices parameters
   p = 10
   n = 100
   sparsity = 2/p
+  
+  # Building the linkages set
   D.pathway = matrix(0, p,p)
   D.pathway[3, 4]=1
   D.pathway[4, 5]=1
   D.pathway[5, 6]=1
   D.pathway[6, 7]=1
-  
+  # Building A accordingly to h0
   A.pathway.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
   A.pathway.hidden[upper.tri(A.pathway.hidden, diag = T)] = 0
   A.pathway.hidden[4,3]=as.integer(!h0)
-  A.pathway.hidden[5,4]=1
-  A.pathway.hidden[6,5]=1
-  A.pathway.hidden[7,6]=1
+  A.pathway.hidden[5,4]=0
+  A.pathway.hidden[6,5]=0
+  A.pathway.hidden[7,6]=0
+  
+  # Running the actual test
   out_U = 0
   out_W = 0
   cli_progress_bar("Cleaning data", total = m)
@@ -371,21 +199,24 @@ test_path = function(m=1e2,h0=T, alpha = 0.05){
 }
 
 test_link = function(m=1e3, alpha=.05, h0=T){
+  # matrices parameters
   p = 10
   n= 100
   sparsity = 2/p
   
+  # Building the linkages set
   D.link = matrix(0, p, p)
   D.link[2, 1] = 1
   D.link[6, 3] = 1
   D.link[10, 9] = 1
-  
+  # Building A accordingly to h0
   A.link.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
   A.link.hidden[upper.tri(A.link.hidden, diag = T)] = 0
-  A.link.hidden[2, 1] = as.integer(!h0)
+  A.link.hidden[2, 1] = 0#as.integer(!h0)
   A.link.hidden[6, 3] = 0
-  A.link.hidden[10, 9] = 0
+  A.link.hidden[10, 9] =0
   
+  # Running the actual test
   out_U = 0
   out_W = 0
   cli_progress_bar("Cleaning data", total = m)
@@ -406,12 +237,12 @@ test_link = function(m=1e3, alpha=.05, h0=T){
 
 ```{r}
 set.seed(1234)
-test_path()
+test_path(h0 = T)
 ```
 
 ```{r}
 set.seed(1234)
-test_link()
+test_link(h0 = T)
 ```
 
 
