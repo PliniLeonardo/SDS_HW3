@@ -36,7 +36,7 @@ Let's see it in code:
 
 ```{r}
 
-compute.middle = function(j, p){
+compute.middle = function(X, A, j, p){
   # Finding the indexes K = {k s.t. k is in [1,p]\j}
     K = which((1:p)!=j)
     # in k we have the indexes of the row without j
@@ -46,9 +46,11 @@ compute.middle = function(j, p){
     return(middle)
 }
 
-vectorized_log_likelihood = function(X, A, sigma.square)
-  return(-sum(sapply(1:p, function(j) (compute.middle(j,p)/(2*sigma.square)+(n/2*log(sigma.square))))))
-
+log_likelihood = function(X, A, sigma.square){
+  n = dim(X)[1]
+  p = dim(X)[2]
+  return(-sum(sapply(1:p, function(j) (compute.middle(X,A,j,p)/(2*sigma.square)+(n/2*log(sigma.square))))))
+}
 
 ```
 
@@ -81,7 +83,7 @@ In code we have:
 sigma.estimator = function(X, A){
   n = dim(X)[1]
   p = dim(X)[2]
-  return(sum(sapply(1:p, function(j)compute.middle(j, p)))/(n*p))
+  return(sum(sapply(1:p, function(j)compute.middle(X,A,j, p)))/(n*p))
 }
 
 ```
