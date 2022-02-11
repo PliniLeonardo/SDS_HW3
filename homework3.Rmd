@@ -124,6 +124,7 @@ inner_LRT_function.paths = function(X, X.tr, X.te, D){
   mle_idx.1 = which(likelihoods.1==max(likelihoods.1))[1] # maximum likelihood over h0
   
   return (likelihoods.1[mle_idx.1]-likelihoods.0[mle_idx.0])
+  #return(list(U.n=exp(log_likelihood(X.tr, A, sigma.unconstrained)-likelihoods[mle_idx]), A.h0=A.h0s[[mle_idx]]))
 }
 
 inner_LRT_function.links = function(X, X.tr, X.te, D){
@@ -177,10 +178,10 @@ test_path = function(m=1e2,h0=T, alpha = .05){
   # Building A accordingly to h0
   A.pathway.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
   A.pathway.hidden[upper.tri(A.pathway.hidden, diag = T)] = 0
-  A.pathway.hidden[4,3]=1#as.integer(!h0)
-  A.pathway.hidden[5,4]=1
-  A.pathway.hidden[6,5]=1
-  A.pathway.hidden[7,6]=1
+  A.pathway.hidden[4,3]=as.integer(!h0)
+  A.pathway.hidden[5,4]=0
+  A.pathway.hidden[6,5]=0
+  A.pathway.hidden[7,6]=0
   
   # Running the actual test
   out_U = 0
@@ -202,26 +203,20 @@ test_path = function(m=1e2,h0=T, alpha = .05){
 test_link = function(m=1e3, alpha=.05, h0=T){
   # matrices parameters
   p = 10
-  n= 1000
+  n= 100
   sparsity = 2/p
   
   # Building the linkages set
   D.link = matrix(0, p, p)
   D.link[2, 1] = 1
-  D.link[6, 2] = 1
   D.link[6, 3] = 1
-  D.link[6, 4] = 1
-  D.link[6, 5] = 1
   D.link[10, 9] = 1
   # Building A accordingly to h0
   A.link.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
   A.link.hidden[upper.tri(A.link.hidden, diag = T)] = 0
-  A.link.hidden[2, 1] =0#as.integer(!h0)
-  A.link.hidden[6, 2] =0
-  A.link.hidden[6, 3] =0
-  A.link.hidden[6, 4] =1
-  A.link.hidden[6, 5] =0
-  A.link.hidden[10, 9]=0
+  A.link.hidden[2, 1] = 1#as.integer(!h0)
+  A.link.hidden[6, 3] = 1
+  A.link.hidden[10, 9] =1
   
   # Running the actual test
   out_U = 0
