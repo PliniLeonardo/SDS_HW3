@@ -223,7 +223,7 @@ p=11
 #FIRST CONNECTION: PIP2->PKC (columns 4  and column 9)
 ### H0: F = { (4,9) }, and A[F] = 0
 D <- matrix(0, p, p)
-D[9,4] = 1
+D[4,9] = 1
 alpha=0.05
 
 temp=log.LRT(X,D, links=T)
@@ -294,12 +294,139 @@ cat("U_n:", U_n, "   W_n:", W_n)
 ##GOOD
 
 # PART 5 ------------------------------------------------------------------
-
+library(MASS)
 data=read.csv("data/cell_signaling/pma.csv",header=T,sep=",")
 head(data,n=5)
 X=data.matrix(data, rownames.force = NA)
-hist(X[,9],breaks=100)
 
-# non mi sembrano tutti normalmente distribuiti--> utilizzo scale o boxcox
-# scale non mi pare porti lontano
-# boxcox
+hist(scale(X[,1]),breaks=50)
+hist(scale(X[,2]),breaks=50)
+hist(scale(X[,3]),breaks=50)
+hist(scale(X[,4]),breaks=50)
+hist(scale(X[,5]),breaks=50)#bad
+hist(scale(X[,6]),breaks=50)
+hist(scale(X[,7]),breaks=50)
+hist(scale(X[,8]),breaks=50)
+hist(scale(X[,9]),breaks=50)# bad
+hist(scale(X[,10]),breaks=50)
+hist(scale(X[,11]),breaks=50)
+
+#scale columns
+for ( i in 1:11){
+  X[,i]=( (X[,i]-mean(X[,i]))/sd(X[,i]) )
+}
+hist(X[,5],breaks=50)#bad
+# SHapiro
+shapiro.test(X[,1])# reject: they are NOT normally distributed
+shapiro.test(X[,2])# reject: they are NOT normally distributed
+shapiro.test(X[,3])# reject: they are NOT normally distributed
+shapiro.test(X[,4])# reject: they are NOT normally distributed
+shapiro.test(X[,5])# reject: they are NOT normally distributed
+shapiro.test(X[,6])# reject: they are NOT normally distributed
+shapiro.test(X[,7])# reject: they are NOT normally distributed
+shapiro.test(X[,8])# reject: they are NOT normally distributed
+shapiro.test(X[,9])# reject: they are NOT normally distributed
+shapiro.test(X[,10])# reject: they are NOT normally distributed
+shapiro.test(X[,11])# reject: they are NOT normally distributed
+#They are not normally distributed
+#Try scale function
+data=read.csv("data/cell_signaling/pma.csv",header=T,sep=",")
+head(data,n=5)
+X=data.matrix(data, rownames.force = NA)
+shapiro.test(scale(X[,1])) # still not normally distributed
+
+# We've tried our best
+
+#FIRST CONNECTION: PKC->PKA (columns 4  and column 9)
+### H0: F = { (9,8) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[9,8] = 1
+alpha=0.05
+
+temp=log.LRT(X,D, links=T)
+U_n=temp$U_n
+W_n=temp$W_n
+
+
+if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
+#dovremmo rigettare
+#male
+out=MLEdag(X,D=D,tau=0.35, mu=1, rho=1.2, trace_obj = F)
+out$pval
+#loro rigettano
+
+#SECOND CONNECTION: PKC->Jnk (columns 4  and column 9)
+### H0: F = { (9,11) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[9,11] = 1
+alpha=0.05
+
+temp=log.LRT(X,D, links=T)
+U_n=temp$U_n
+W_n=temp$W_n
+
+if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
+#dovremmo rigettare
+#male
+out=MLEdag(X,D=D,tau=0.35, mu=1, rho=1.2, trace_obj = F)
+out$pval
+#neanche loro rigettano
+
+#Third CONNECTION: PKC->PIP3 (columns 4  and column 9)
+### H0: F = { (9,5) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[9,5] = 1
+alpha=0.05
+
+temp=log.LRT(X,D, links=T)
+U_n=temp$U_n
+W_n=temp$W_n
+
+if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
+#dovremmo Non rigettare H0
+#ok
+out=MLEdag(X,D=D,tau=0.35, mu=1, rho=1.2, trace_obj = F)
+out$pval
+#loro invece la rigettano
+
+# non riusciamo a rigettare l'hp nulla quando è sbagliata noi: entrambe le procedure
+# non lavorano correttamente
+
+#PATHWAY
+#PATHWAY LINKAGE
+#check all the connections from PKC
+#PKC->(RAF;MEK,ERK) which means columns (9->1,2,6)
+D <- matrix(0, p, p)
+D[9,1] = 1
+D[1,2] = 1
+D[2,6] = 1
+alpha=0.05
+
+temp=log.LRT(X,D, links=F)
+U_n=temp$U_n
+W_n=temp$W_n
+cat("U_n:", U_n, "   W_n:", W_n)
+# non rigettiamo l'hp nulla quindi ok
+out=MLEdag(X,D=D,tau=0.35, mu=1, rho=1.2, trace_obj = F)
+out$pval
+#non rigettano l'hp nulla come noi
+
+
+#PROVE BOXCOX
+data=read.csv("data/cell_signaling/pma.csv",header=T,sep=",")
+X=data.matrix(data, rownames.force = NA)
+
+transform=function(column){
+  bc=boxcox(column~1,lambda=seq(-2,2));
+  best_lambda=bc$x[which(bc$y==max(bc$y))]
+  if (best_lambda==0) {
+    column=sapply(column,function(x) log(x))
+  }
+  else {
+    column=sapply(column,function(x) (x^best_lambda-1)/best_lambda)
+  }
+}
+
+ris=transform(X[,3])
+shapiro.test(ris)
+#ancora nulla: non sono normali
