@@ -428,5 +428,6 @@ transform=function(column){
 }
 
 ris=transform(X[,3])
-shapiro.test(ris)
+hist(scale(ris))
+shapiro.test(scale(ris))
 #ancora nulla: non sono normali
