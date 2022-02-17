@@ -1,7 +1,10 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  html_notebook: default
+  pdf_document: default
 ---
+
 
 We have a sampling of $n$ independent observation from a gaussian *joint* distribution of dimension $p$. These data are stored into a matrix $\mathbb{X} \in \mathbb{R}^{n\times p}$.<br>
 
@@ -96,8 +99,7 @@ The choice to reject the $H_0$ hypothesis in the two tests are made basing on on
 * $W_n$ for the **cross-fit** likelihood ratio
 
 The main idea behind the computation of these two metrics is that when we want the **constrained version** of $\mathbb{A}$ we'll pass into the ```MLEdag``` function the observation matrix, a matrix $D$ that is the matrix representation of the set of linkages $F$ and is such that has 1 only in the coordinates $(i, j) \in F$ and some other numerical parameters. We'll compute over the entire observation the estimate of $\mathbb{A}$ with this function and we'll take the A.H0 result for the constrained version and A.H1 for the unconstrained one.<br>
-Once we've the $\mathbb{A}$ matrices it's trivial to find the estimates for the $\sigma^2$ simply using the function ```sigma.estimator``` described above. In this specific case we'll compute these estimates over the training part of $
-\mathbb{X}$ for the **constrained version** and over the test part for the other one.<br>
+Once we've the $\mathbb{A}$ matrices it's trivial to find the estimates for the $\sigma^2$ simply using the function ```sigma.estimator``` described above. In this specific case we'll compute these estimates over the training part of $\mathbb{X}$ for the **constrained version** and over the test part for the other one.<br>
 At this point we've $\hat{\theta}_0^{tr}$ and $\hat{\theta}^{te}$ for compute the $U_n$ value and, conseguently, the $W_n$, but in both cases we'll use their *logarithmic version*.
 
 
@@ -247,4 +249,106 @@ set.seed(1234)
 test_link(h0 = F, m=1e2)
 ```
 
+## PART 3
 
+It is time to see the performance of our method: let's start with the size alpha.
+We can evaluate the power as the proportion of rejections we get by applying our test
+on M dataset generated from a model compatible with H0.
+In our framework, we have H0: F = { (p,2) } and, consequently, A[F] = 0.To test it we
+used the following chunck of code :
+
+```{r}
+p <- 10
+n <- 200
+M <- 1000
+
+### H0: F = { (p,2) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[p,2] = 1
+
+### Adjacency Matrix >> Hub
+# All connected to 1, NO EDGE between p-2 >> **COMPATIBLE** with H0
+A      <- matrix(0, p, p)     
+A[, 1] <- sign( runif( p, min = -1, max = 1 ) )
+A[1,1] <- 0
+
+# Simulation --------------------------------------------------------------
+
+M=1000
+cont=0
+alpha=0.05
+contU=0
+contW=0
+U_n <- rep(NA, M)
+W_n <- rep(NA, M)
+for(i in 1:M) {
+  X   <- matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A) )
+  temp=log.LRT(X,D, links=T,mu=1.2)
+  U_n[i]=temp$U_n
+  W_n[i]=temp$W_n
+  
+  if (U_n[i]>log(1/alpha)) contU=contU+1
+  if (W_n[i]>log(1/alpha)) contW=contW+1
+}
+
+cat('alpha is equal to for U ', contU/M,'alpha is equal to for W',contW/M)
+```
+
+We finished with a size of 0.092 for the linkage-type test and 0.10 for pathway-type test
+which seem a good result.
+
+We found some problems with the power of our test.............
+...........
+
+
+## PART 4
+
+We found particularly interesting the missed linkages: if we are able to detect them,
+our method could be a good alternative to MLE_dag. If not, it should be another indication that they have a strange behavior and that this approach is not the best to detect them.
+
+
+We decided to test the chain PKC-Raf-Mek-Erk with the pathway-type test since it seems a pretty long chain in which PKC is involved as starting element and we have access to a dataset (pma.csv) in which there is a perturbation on PKC.
+
+## PART 5
+We are now using pma.csv to test our hypothesis, but before running any test, we need to check that our assumptions are correct: are our data effectively zero-mean Gaussian?
+
+This is our starting point 
+![grafici](data/distribution_plots/original/pma.png)
+and we can simply understand that our data are all but noramlly distributed.
+Just to be sure, we runned boxplots and Shapiro-tests that confirmed our hypothesis.
+
+Our intention was then to modify the data in order to approximate a zero-mean Gaussian.
+We tried different methodologies such as scale method, subtract the mean and divide by the standard deviation and box-cox. We opted for a combination of a box-cox transformation and scale method.
+The box-cox transformation is implemented as:
+\begin{equation}
+y(\lambda)= 
+\begin{cases}
+    \frac{y^{\lambda}-1}{\lambda},& \text{if } \lambda \neq 0\\
+    log(y),              & \text{if} \lambda = 0
+\end{cases}
+\end{equation} 
+ 
+in code we have:
+```{r}
+box_cox=function(column){
+  bc=boxcox(column~1,lambda=seq(-5,5));
+  best_lambda=bc$x[which(bc$y==max(bc$y))]
+  if (best_lambda==0) {
+    column=sapply(column,function(x) log(x))
+  }
+  else {
+    column=sapply(column,function(x) (x^best_lambda-1)/best_lambda )
+  }
+  return(column)
+}
+
+normalize=function(column){
+   column=scale(box_cox(column))
+   return(column)
+ }
+
+
+```
+
+After applying this transformation to our data, we ended out with 
+![grafici](data/distribution_plots/scaled_vs_normalized/pma.png)
