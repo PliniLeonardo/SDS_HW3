@@ -1,0 +1,353 @@
+---
+title: "R Notebook"
+output:
+  html_notebook: default
+  pdf_document: default
+---
+
+
+We have a sampling of $n$ independent observation from a gaussian *joint* distribution of dimension $p$. These data are stored into a matrix $\mathbb{X} \in \mathbb{R}^{n\times p}$.<br>
+
+Given the matrix we want to get more clues about the unknown adjacency matrix that models the DAG of the joint distribution that has generated our observations.
+
+This matrix is $\mathbb{A}$. It's a lower triangular matrix that belongs to $\mathbb{R}^{p\times p}$ and it's such that it has a 0 in the position $(i,j)$ if $j \not\in pa(X_i)$ else the value represents the strength of the relationship that involves the two nodes.<br>
+
+We know how to model our observation, we know what $\mathbb{A}$ means, but how can we link the distribution of the j-th random variable (remember that we have a p-dimensional random vector) to the matrix $\mathbb{A}$?<br>
+Well we can say that the j-th random variable $X_j$ can be computed as follows:
+\begin{equation}
+  X_j = \sum_{k | k \neq j}\mathbb{A[j,k]\cdot X_k}+\epsilon_j
+\end{equation}
+The gaussian is in $\epsilon$, in fact $\epsilon_j \sim N_1(0, \sigma^2)$.
+
+So we have a model that depends from two parameters that are $\mathbb{A}$ and $\sigma^2$. At this point we can proceed to the things that are of interest for us.
+
+Since we can obtain the distributions of X from our parameters, we want to discover our parameter starting from our observations, so the problem is reduced to finding $\theta = (\mathbb{A}, \sigma^2)$ starting from $\mathbb{X}$.
+
+In order to do this we can use the log likelihood that's defined as follows:
+\begin{equation}
+  \mathcal{\ell}_n(\mathbb{A}, \sigma^2) \propto - \sum_{j=1}^p \left (\frac{1}{2\sigma^2} \sum_{i=1}^n \left( \mathbb{X}[i,j] - \sum_{k | k\neq j} \mathbb{A}[j,k]\cdot \mathbb{X}[i,k]\right)^2 + \frac{n}{2}ln\sigma^2 \right)
+\end{equation}
+Let's enroll it:
+We have three sums that are, going from the inner to the outer:
+
+* *inner*: $\sum_{k \in [1,p] \setminus j} \mathbb{A}[j,k]\cdot \mathbb{X}[i,k]$ where we are computing the dot product from the weight that has the eventual edge that goes from $k$ to $j$ (scalar) and the value of the k-th random variable ($X_k$) in the i-th sample, and then summing all these values. This can be seen as a kind of weighted sum of the i-th sample where the weights are the influences that all the other random variables have over the k-th one, and as such it can be interpreted as "how much j is influenced by the other variables in the sample $i$"
+* *middle*: $\sum_{i=1}^n \left( \mathbb{X}[i,j] - \text{inner}\right )^2$ where for each of the i-th observation of the j-th random variable, we subtract the sum obtained in the inner that is a scalar, than we sum all these values. We are subtracting the value of the j-th random variable in the sample i with the influence that the other random variables have had on $j$, so we can see it as 'how much j is distant from the value that should have accordingly with the other variables', then we do the square of this difference. It can be interpreted as the euclidean distance from the vector of the n samples of j and the vector of the influences of all the other variables (the value that should have) over j.
+* *outer*: $\sum_{j=1}^p \frac{\text{middle}}{2\sigma^2} + \frac{n}{2}ln\sigma^2$ We sums up the value obtained from all the $p$ random variables multiplied and summed with constants that are dependent from $\sigma^2$
+
+Let's see it in code:
+
+
+```{r}
+
+compute.middle = function(X, A, j, p){
+  # Finding the indexes K = {k s.t. k is in [1,p]\j}
+    K = which((1:p)!=j)
+    # in k we have the indexes of the row without j
+    
+    inners = apply(X[, K] * A[j, K], 1, sum) # n length vector containing the inner sums for each i-th sample
+    middle = sum((X[, j] - inners)^2)  # as a matter of fact in the middle we are working on the j-th column
+    return(middle)
+}
+
+log_likelihood = function(X, A, sigma.square){
+  n = dim(X)[1]
+  p = dim(X)[2]
+  return(-sum(sapply(1:p, function(j) (compute.middle(X,A,j,p)/(2*sigma.square)+(n/2*log(sigma.square))))))
+}
+
+```
+
+
+Since MLEdag computes for us the estimate of the matrix $\mathbb{A}$ and the matrix $\mathbb{X}$ is what we have given that it's our observation, we can optimize the log likelihood in order to retrieve sigma, so it'll be the sigma.MLE
+
+```{r}
+sigma.MLE = function(X, A)
+  return(
+    optim(
+      par=c(0.01),
+      fn=function(sigma.sq)
+        log_likelihood(X,A, sigma.sq),
+      method=c("Brent"),
+      lower = 0,
+      upper = 10000,
+            control = list(fnscale = -1)
+    )
+  )
+```
+
+According with [Chunlin Li Et. al](https://elearning.uniroma1.it/pluginfile.php/1112893/mod_assign/introattachment/0/Likelihood%20Ratio%20Tests%20for%20a%20Large%20Directed%20Acyclic%20Graph.pdf?forcedownload=1) we can also approximate $\sigma^2$ with:
+\begin{equation}
+  \hat{\sigma}^2 = (np)^{-1} \sum_{j=1}^p \sum_{i=1}^n\left ( \mathbb{X}[i,j] - \sum_{k | k\neq j} \mathbb{A}[j,k]\cdot \mathbb{X}[i,k] \right ) ^2
+\end{equation}
+
+In code we have:
+
+```{r}
+sigma.estimator = function(X, A){
+  n = dim(X)[1]
+  p = dim(X)[2]
+  return(sum(sapply(1:p, function(j)compute.middle(X,A,j, p)))/(n*p))
+}
+
+```
+
+## Constrained Likelihood Ratio Test
+Since we can now approximate sigma and $\mathbb{A}$ starting from $\mathbb{X}$, we can now run a constrained likelihood ratio test, in order to test the existence of directed links between specific nodes or directed pathways.<br>
+The choice to reject the $H_0$ hypothesis in the two tests are made based on one of these two values:
+
+* $U_n$ for the **split** likelihood ratio
+* $W_n$ for the **cross-fit** likelihood ratio
+
+The main idea behind the computation of these two metrics is that when we want the **constrained version** of $\mathbb{A}$ we'll pass into the ```MLEdag``` function the observation matrix, a matrix $D$ that is the matrix representation of the set of linkages $F$ and is such that has 1 only in the coordinates $(i, j) \in F$ and some other numerical parameters. We'll compute over the entire observation the estimate of $\mathbb{A}$ with this function and we'll take the A.H0 result for the constrained version and A.H1 for the unconstrained one.<br>
+Once we've the $\mathbb{A}$ matrices it's trivial to find the estimates for the $\sigma^2$ simply using the function ```sigma.estimator``` described above. In this specific case we'll compute these estimates over the training part of $\mathbb{X}$ for the **constrained version** and over the test part for the other one.<br>
+At this point we've $\hat{\theta}_0^{tr}$ and $\hat{\theta}^{te}$ for compute the $U_n$ value and, consequently, the $W_n$, but in both cases we'll use their *logarithmic version*.
+
+
+We want to highlight that for the pathway test we need also to compute not only the $\theta$ that maximizes the likelihood but also we need to find the right value of sparsity that maximizes it, so there will be one more step in the computation but the main idea remains the same.
+
+```{r}
+inner_LRT_function.paths = function(X, X.tr, X.te, D){
+   
+  # Computing all the A.h0 over the sparsity parameters 'k'
+  A.mles = lapply(1:sum(D), function(mu)MLEdag(X, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F))
+  #A.h0s = lapply(1:sum(D), function(mu)MLEdag(X.tr, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F)$A.H0)
+  A.h0s  = lapply(A.mles, function(a)a$A.H0)
+  #A.h1s = lapply(1:sum(D), function(mu)MLEdag(X.te, D=D, tau=0.35, mu=mu, rho=1.2, trace_obj = F)$A.H1)
+  A.h1s  = lapply(A.mles, function(a)a$A.H1)
+  # For each A.h0 compute the associated sigma
+  sigmas.0 = t(sapply(A.h0s, function(a)sigma.estimator(X.tr, a)))
+  sigmas.1 = t(sapply(A.h1s, function(a)sigma.estimator(X.te, a)))
+  # Computing the likelihoods of each pair (A.h0, sigma.h0)
+  likelihoods.0 = t(sapply(1:length(sigmas.0), function(idx)log_likelihood(X.tr, A.h0s[[idx]], sigmas.0[idx])))
+  likelihoods.1 = t(sapply(1:length(sigmas.1), function(idx)log_likelihood(X.tr, A.h1s[[idx]], sigmas.1[idx])))
+  
+  # Finding the idx that give us the maximum likelihood
+  mle_idx.0 = which(likelihoods.0==max(likelihoods.0))[1] # maximum likelihood over h0
+  mle_idx.1 = which(likelihoods.1==max(likelihoods.1))[1] # maximum likelihood over h0
+  
+  return (likelihoods.1[mle_idx.1]-likelihoods.0[mle_idx.0])
+  #return(list(U.n=exp(log_likelihood(X.tr, A, sigma.unconstrained)-likelihoods[mle_idx]), A.h0=A.h0s[[mle_idx]]))
+}
+
+inner_LRT_function.links = function(X, X.tr, X.te, D){
+  tmp = MLEdag(X = X, D = D, tau = 0.35, mu = 1, 
+                    rho = 1.2, trace_obj = FALSE)
+  A.h0 = tmp$A.H0
+  A = tmp$A.H1
+  
+  sigma.h0 = sigma.estimator(X.tr, A.h0)
+  sigma.unconstrained = sigma.estimator(X.te, A)
+  
+  return(log_likelihood(X.tr, A, sigma.unconstrained)-log_likelihood(X.tr, A.h0, sigma.h0))
+}
+
+log.LRT = function(X,D, links=T){
+  n=dim(X)[1]
+  X.tr = X[1:(n%/%2),]
+  X.te = X[(n%/%2+1):n,]
+  
+  if(links){
+    U_n = inner_LRT_function.links(X, X.tr, X.te, D)
+    U_n.swap = inner_LRT_function.links(X, X.te, X.tr, D)
+  }
+  else{
+    U_n = inner_LRT_function.paths(X, X.tr, X.te, D)
+    U_n.swap = inner_LRT_function.paths(X, X.te, X.tr, D)
+  }
+  return(list(links = links, U_n = U_n, W_n = (log((exp(U_n)+exp(U_n.swap))/2))))
+}
+
+```
+
+### Testing the functions
+Since we have implemented the computation of these ratios we can now test whether a sample comes from a distribution that has a specific set of linkages (or directed pathway) and when it doesn't. In order to test our implementation we've built two functions, one for the linkages problem and one for the path. In both cases we built a linkages matrix $D$ and we create an adjacency matrix $\mathbb{A}$ that is built in function of a parameter $h0$ that indicates if we want that $\mathbb{A} \in H_0$ or not. It takes also the value of $\alpha$ in order to execute the test. As anticipated we're working on the logarithmic version of $U_n$ and $W_n$ so we'll check whether they are lower than $-log(\alpha)$. We sums up the times that we reject the null hypothesis and if we pass h0=True we'll check the percentage of False discoveries, which is expected to be around the value of $alpha$ (actually it should be lower than it but since it's a new and experimental way to make this kind of tests, it's acceptable if we don't achieve perfect results.). We can also check the percentage of true negative passing h0=False.
+
+```{r}
+library(cli)
+library(clrdag)
+test_path = function(m=1e2,h0=T, alpha = .05){
+  # matrices parameters
+  p = 10
+  n = 100
+  sparsity = 2/p
+  
+  # Building the linkages set
+  D.pathway = matrix(0, p,p)
+  D.pathway[3, 4]=1
+  D.pathway[4, 5]=1
+  D.pathway[5, 6]=1
+  D.pathway[6, 7]=1
+  # Building A accordingly to h0
+  A.pathway.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+  A.pathway.hidden[upper.tri(A.pathway.hidden, diag = T)] = 0
+  A.pathway.hidden[4,3]=as.integer(!h0)
+  A.pathway.hidden[5,4]=0
+  A.pathway.hidden[6,5]=0
+  A.pathway.hidden[7,6]=0
+  
+  # Running the actual test
+  out_U = 0
+  out_W = 0
+  cli_progress_bar("Cleaning data", total = m)
+  for(i in 1:m){
+    X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden) )
+    LRT = log.LRT(X, D.pathway, links=F)
+    if(LRT$links)
+      cat('ERRORE, chiamata LRT con links=', links,'\n')
+    out_U = out_U+(LRT$U_n>-log(alpha))
+    out_W = out_W+(LRT$W_n>-log(alpha))
+    cli_progress_update()
+  }
+  cli_progress_done()
+  return(list(U_n = out_U/m, W_n = out_W/m))
+}
+
+test_link = function(m=1e3, alpha=.05, h0=T){
+  # matrices parameters
+  p = 10
+  n= 100
+  sparsity = 2/p
+  
+  # Building the linkages set
+  D.link = matrix(0, p, p)
+  D.link[2, 1] = 1
+  D.link[6, 3] = 1
+  D.link[10, 9] = 1
+  # Building A accordingly to h0
+  A.link.hidden = matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+  A.link.hidden[upper.tri(A.link.hidden, diag = T)] = 0
+  A.link.hidden[2, 1] = 1#as.integer(!h0)
+  A.link.hidden[6, 3] = 1
+  A.link.hidden[10, 9] =1
+  
+  # Running the actual test
+  out_U = 0
+  out_W = 0
+  cli_progress_bar("Cleaning data", total = m)
+  for(i in 1:m){
+    X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.link.hidden) )
+    LRT = log.LRT(X, D.link, links=T)
+    if(!LRT$links)
+      cat('ERRORE, chiamata LRT con links=', links,'\n')
+    out_U = out_U+(LRT$U_n>-log(alpha))
+    out_W = out_W+(LRT$W_n>-log(alpha))
+    cli_progress_update()
+  }
+  cli_progress_done()
+  return(list(U_n=out_U/m, W_n=out_W/m))
+}
+```
+
+
+```{r}
+set.seed(1234)
+test_path(h0 = F)
+```
+
+```{r}
+set.seed(1234)
+test_link(h0 = F, m=1e2)
+```
+
+## PART 3
+
+It is time to see the performance of our method: let's start with the size alpha.
+We can evaluate the power as the proportion of rejections we get by applying our test
+on M datasets generated from a model compatible with H0.
+In our framework, we have H0: F = { (p,2) } and, consequently, A[F] = 0.To test it we
+used the following chunk of code :
+
+```{r}
+p <- 10
+n <- 200
+M <- 1000
+
+### H0: F = { (p,2) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[p,2] = 1
+
+### Adjacency Matrix >> Hub
+# All connected to 1, NO EDGE between p-2 >> **COMPATIBLE** with H0
+A      <- matrix(0, p, p)     
+A[, 1] <- sign( runif( p, min = -1, max = 1 ) )
+A[1,1] <- 0
+
+# Simulation --------------------------------------------------------------
+
+M=1000
+cont=0
+alpha=0.05
+contU=0
+contW=0
+U_n <- rep(NA, M)
+W_n <- rep(NA, M)
+for(i in 1:M) {
+  X   <- matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A) )
+  temp=log.LRT(X,D, links=T,mu=1.2)
+  U_n[i]=temp$U_n
+  W_n[i]=temp$W_n
+  
+  if (U_n[i]>log(1/alpha)) contU=contU+1
+  if (W_n[i]>log(1/alpha)) contW=contW+1
+}
+
+cat('alpha is equal to for U ', contU/M,'alpha is equal to for W',contW/M)
+```
+
+We finished with a size of 0.092 for the linkage-type test and 0.10 for pathway-type test,
+which seem like good results.
+
+We found some problems with the power of our test.............
+...........
+
+
+## PART 4
+
+We found particularly interesting some details about missed linkages: if we are able to detect them, our method could be a good alternative to MLE_dag. If not, it should be another indicator that they have a strange behavior and that this approach is not the best to detect them.
+
+
+We decided to test the chain PKC-Raf-Mek-Erk with the pathway-type test since it seemed like a pretty long chain in which PKC is involved as starting element, and we have access to a dataset (pma.csv) in which there is a perturbation on PKC.
+
+## PART 5
+We are now using pma.csv to test our hypothesis, but before running any test, we need to check that our assumptions are correct: are our data effectively zero-mean Gaussian?
+
+This is our starting point 
+![grafici](data/distribution_plots/original/pma.png)
+and we can simply notice that our data is all but normally distributed.
+Just to be sure, we ran boxplots and Shapiro-tests that confirmed our hypothesis.
+
+Our intention was then to modify the data in order to approximate a zero-mean Gaussian.
+We tried different methodologies such as scale method, subtract the mean and divide by the standard deviation and box-cox. We opted for a combination of a box-cox transformation and scale method.
+The box-cox transformation is implemented as:
+\begin{equation}
+y(\lambda)= 
+\begin{cases}
+    \frac{y^{\lambda}-1}{\lambda},& \text{if } \lambda \neq 0\\
+    log(y),              & \text{if} \lambda = 0
+\end{cases}
+\end{equation} 
+ 
+in code we have:
+```{r}
+box_cox=function(column){
+  bc=boxcox(column~1,lambda=seq(-5,5));
+  best_lambda=bc$x[which(bc$y==max(bc$y))]
+  if (best_lambda==0) {
+    column=sapply(column,function(x) log(x))
+  }
+  else {
+    column=sapply(column,function(x) (x^best_lambda-1)/best_lambda )
+  }
+  return(column)
+}
+
+normalize=function(column){
+   column=scale(box_cox(column))
+   return(column)
+ }
+
+
+```
+
+After applying this transformation to our data, we ended out with 
+![grafici](data/distribution_plots/scaled_vs_normalized/pma.png)
