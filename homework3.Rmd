@@ -251,13 +251,12 @@ test_link(h0 = F, m=1e2)
 
 ## PART 3
 
-It is time to see the performance of our method: let's start with the size alpha.
-We can evaluate the power as the proportion of rejections we get by applying our test
-on M dataset generated from a model compatible with H0.
-In our framework, we have H0: F = { (p,2) } and, consequently, A[F] = 0.To test it we
-used the following chunck of code :
+Now let's check the size $\alpha$  and the power $ 1- \beta $ of our procedure.
 
+Starting from the size and noticing that the power is the proportion of rejections we get by applying our test on M dataset generated from a model *compatible* with H0,  we implemented the following simulation:
 ```{r}
+### Parameters
+set.seed(2018)
 p <- 10
 n <- 200
 M <- 1000
@@ -292,19 +291,61 @@ for(i in 1:M) {
 }
 
 cat('alpha is equal to for U ', contU/M,'alpha is equal to for W',contW/M)
+
+# 0.092 and 0.103
 ```
+Our results are 0.092 for Un and 0.103 for Wn respectively.
 
-We finished with a size of 0.092 for the linkage-type test and 0.10 for pathway-type test
-which seem a good result.
+Noticing that the power is the proportion of rejections we get by applying our test on M dataset generated from a model *NOT compatible* with H0,  we implemented the following simulation:
+```{r}
+#Beta= the probability of failing to reject the null hypothesis when the null 
+# hypothesis is false
+p=10
+n=100
+sparsity=2/p
+### H0: F = { (p,1) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[2:p,1]=1
+D[3:p,2]=1
 
-We found some problems with the power of our test.............
-...........
+### Adjacency Matrix >> Hub
+# All connected to 1, NO EDGE between p-2 >> **NOT COMPATIBLE** with H0
+#A      <- matrix(0, p, p)     
+#A[2:p, 1] <- sign( runif( p-1, min = -1, max = 1 ) )
+set.seed(2018)
+A=matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A[2,8]=1
+A[5,6]=1
+A[8,9]=1
+A[2:p,1]=1
+A[3:p,2]=1
 
+# SIMULATION
+contU=0
+contW=0
+alpha=0.05
+M=1000
+U_n <- rep(NA, M)
+W_n <- rep(NA, M)
+for(i in 1:M) {
+  X   <- matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A) )
+  temp=log.LRT(X,D, links=T,mu=1.2)
+  U_n[i]=temp$U_n
+  W_n[i]=temp$W_n
+  
+  if (U_n[i]>log(1/alpha)) contU=contU+1
+  if (W_n[i]>log(1/alpha)) contW=contW+1
+}
+
+cat('1-beta is equal to for U: ', contU/M,'   ,1-beta is equal to for W:',contW/M)
+#1-beta is equal to for U:  0.969    ,1-beta is equal to for W: 0.991
+```
+ that produce as results 0.969 for Un and 0.991 for Wn respectively.
+ 
 
 ## PART 4
 
-We found particularly interesting the missed linkages: if we are able to detect them,
-our method could be a good alternative to MLE_dag. If not, it should be another indication that they have a strange behavior and that this approach is not the best to detect them.
+We found interesting to test the performance of our method for missed linkages so we decided to test the connection between PIP2->PKC. Even if all the missed linkages were very attractive, we decided to see the behaviour of the test under different conditions. For this reason, we opted for PKC->Jnk as second connection and PKC->PIP3 as third connection. In this way we could have a general overview of the performance.
 
 
 We decided to test the chain PKC-Raf-Mek-Erk with the pathway-type test since it seems a pretty long chain in which PKC is involved as starting element and we have access to a dataset (pma.csv) in which there is a perturbation on PKC.
@@ -330,25 +371,153 @@ y(\lambda)=
  
 in code we have:
 ```{r}
-box_cox=function(column){
-  bc=boxcox(column~1,lambda=seq(-5,5));
-  best_lambda=bc$x[which(bc$y==max(bc$y))]
-  if (best_lambda==0) {
-    column=sapply(column,function(x) log(x))
-  }
-  else {
-    column=sapply(column,function(x) (x^best_lambda-1)/best_lambda )
-  }
-  return(column)
+boxcox.transform= function(data){
+  bx = boxcox(data~1, plotit = F)
+  lambda = bx$x[which(bx$y==max(bx$y))[1]]
+  if(lambda != 0)
+    return((data^lambda-1)/lambda)
+  else
+    return(log(data))
 }
-
-normalize=function(column){
-   column=scale(box_cox(column))
-   return(column)
- }
-
+normalize = function(data)
+  return(scale(boxcox.transform(data)))
 
 ```
 
-After applying this transformation to our data, we ended out with 
+After applying this transformation to our data, we ended out with this result: 
+we can see green histograms after the process of scaling and soft blue histogram after the boxcox transformation.
 ![grafici](data/distribution_plots/scaled_vs_normalized/pma.png)
+
+This seems a good result starting from our data: in fact, they grafically appear normally distributed around 0.
+
+### CONNECTION 1 PIP2->PKC # male *2 ( perchè il missed lo azzeccano?)
+
+ We fixed a level alpha=0.05 so that we have $log(\frac{1}{\alpha})\simeq 1.30$. 
+ The following table summarize our results.
+
+k           pvalue_MLE_dag    log(Un)               log(Wn)
+--------   --------------   ---------------- ----------------
+0.01       0.0349             -11.13            -10.02
+0.1        0.0349             -11.13            -10.02
+1          0.0349             -11.13            -10.02
+10         0.0349             -11.13            -10.02
+100        0.0349             -12.04            -10.84
+---------  --------------   ---------------- ----------------
+
+We can see that there aren't many variations as the parameter k varies as first result.
+But let's analyze our results: in this specific case ( we fixed an alpha level and a specific dataset where there is a perturbation on PKC ), MLE_dag rejected  the null hypothesis correctly while we cannot reject the null hypothesis.
+
+### SECOND CONNECTION: PKC->Jnk  # C'é #bene
+
+k           pvalue_MLE_dag    log(Un)               log(Wn)
+--------   --------------   ---------------- ----------------
+0.01       5.21e-10            20.38              19.69
+0.1        5.21e-10            22.7               22.01
+1          5.21e-10            22.7               22.01
+10         5.21e-10            22.7               22.01
+100        6.07e-10            23.27              22.57
+---------  --------------   ---------------- ----------------
+
+Also in this example, the k parameter did influenced in a strong way the result.
+MLE_dag rejected correctly the null hypothesis and so did we.
+
+### THIRD  CONNECTION: PKC->PIP3 # Non c'è #bene
+
+k           pvalue_MLE_dag    log(Un)               log(Wn)
+--------   --------------   ---------------- ----------------
+0.01       0.65               -12.61              -11.80
+0.1        0.65               -12.61              -11.80
+1          0.65               -12.61              -11.80
+10         0.65               -12.61              -11.80
+100        0.64               -13.99              -13.09
+---------  --------------   ---------------- ----------------
+
+In this case, MLE_dag accepted the null hypothesis correctly and we did the same.
+In addition, this is the only situation in which we found a sufficient deviation in our statistics 
+and it should be interesting to see it grafically.
+
+
+#PATHWAY LINKAGE: PKC->(RAF;MEK,ERK) #male
+
+k           pvalue_MLE_dag    log(Un)               log(Wn)
+--------   --------------   ---------------- ----------------
+0.01       2.9e-96            -71.65              -55.68
+0.1        2.9e-96            -71.65              -55.68
+1          2.9e-96            -71.65              -55.68
+10         2.9e-96            -71.65              -55.68
+100        6.2e-100           -71.65              -55.68
+---------  --------------   ---------------- ----------------
+
+MLE_dag method reject the null hypothesis correctly while we cannot reject the null hypothesis.
+
+
+Summing up, MLE_dag has a good performance on this dataset while we have some difficulties in rejecting the null hypothesis.
+
+## POINT 6
+Now let's move on the entire dataset obtained concatenating all the data.
+As before, we can visually check our zero-mean Gaussian aasumption.
+
+This is our starting point 
+![grafici](data/distribution_plots/original/concatenated.png)
+and after our transformation (box-cox and scale ), we have 
+![grafici](data/distribution_plots/scaled_vs_normalized/concatenated.png)
+As before, we can say that we achieved a good result with respect to our assumption.
+It's interesting to compare the results of our test on a different dataset in which we find different kind of perturbations.
+
+We fixed a level alpha=0.05 so that we have $ log(\frac{1}{\alpha})\simeq1.30 $.
+The following table summarize our results.
+ 
+### CONNECTION 1 PIP2->PKC # male *2
+
+ We fixed a level alpha=0.05 so that we have $log(\frac{1}{\alpha})\simeq1.30$.
+ The following table summarize our results.
+
+k           pvalue_MLE_dag    log(Un)               log(Wn)
+--------   --------------   ---------------- ----------------
+0.01          1.67e-113           -883               -Inf
+0.1           1.67e-113           -883               -Inf
+1             1.67e-113           -883               -Inf
+10            1.67e-113           -883               -Inf
+100           1.67e-113           -883               -Inf
+---------  --------------   ---------------- ----------------
+
+They reject correctly the null hypothesis ( but they said it was a missed link even if the take it correctly all the times) while we can not reject the null hypothesis
+
+### SECOND CONNECTION: PKC->Jnk  # C'é  #male
+
+k           pvalue_MLE_dag    log(Un)               log(Wn)
+--------   --------------   ---------------- ----------------
+0.01       0                  -466.16            -466.86
+0.1        0                  -466.16            -466.86
+1          0                  -466.16            -466.86
+10         0                  -466.16            -466.86
+100        0                  -751.49            -Inf
+---------  --------------   ---------------- ----------------
+
+They reject the null hypothesis (correctly) and we did not reject the null hypothesis
+
+### THIRD  CONNECTION: PKC->PIP3 # Non c'è #bene*2
+
+k           pvalue_MLE_dag    log(Un)               log(Wn)
+--------   --------------   ---------------- ----------------
+0.01       3.37e-30           -1342.46            -Inf
+0.1        3.37e-30           -1342.46            -Inf
+1          3.37e-30           -1342.46            -Inf
+10         3.37e-30           -1342.46            -Inf
+100        1.81e-29           -1679.78            -Inf
+---------  --------------   ---------------- ----------------
+
+They reject the null hypothesis (uncorrect), while we correctly accept the null hypothesis
+
+#PATHWAY LINKAGE: PKC->(RAF;MEK,ERK) #male*2
+
+k           pvalue_MLE_dag    log(Un)               log(Wn)
+--------   --------------   ---------------- ----------------
+0.01       0                  -1115.38            -Inf
+0.1        0                  -1115.38            -Inf
+1          0                  -1115.38            -Inf
+10         0                  -1115.38            -Inf
+100        0                  -1115.38            -Inf
+---------  --------------   ---------------- ----------------
+
+They reject the null hypothesis (correctly) but we can not reject the null hypothesis

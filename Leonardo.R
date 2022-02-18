@@ -14,6 +14,7 @@ A[upper.tri(A, diag=TRUE)] <- 0
 sum(A != 0) # 26
 ## data matrix
 X <- matrix(rnorm(n*p), n, p) %*% t(solve(diag(p) - A))
+
 '''
 #Loglikelihood
 loglikelihood=function(A,sigma_square,X){
@@ -40,8 +41,6 @@ loglikelihood=function(A,sigma_square,X){
 
 
 # Part 3 ------------------------------------------------------------------
-
-# FUNZIONI ALE
 
 compute.middle = function(X,A,j, p){
   # Finding the indexes K = {k s.t. k is in [1,p]\j}
@@ -172,28 +171,26 @@ n=100
 sparsity=2/p
 ### H0: F = { (p,1) }, and A[F] = 0
 D <- matrix(0, p, p)
-D[2,1] = 1
-D[6,3] = 1
-D[10,9] = 1
-#D[2:p,1]=1
-#D[5:p,4]=1
-
-
+D[2:p,1]=1
+D[3:p,2]=1
 
 ### Adjacency Matrix >> Hub
 # All connected to 1, NO EDGE between p-2 >> **NOT COMPATIBLE** with H0
 #A      <- matrix(0, p, p)     
 #A[2:p, 1] <- sign( runif( p-1, min = -1, max = 1 ) )
+set.seed(2018)
 A=matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
-A[2,1]=1
-A[6,3]=1
-A[10,9]=1
+A[2,8]=1
+A[5,6]=1
+A[8,9]=1
+A[2:p,1]=1
+A[3:p,2]=1
 
 # SIMULATION
 contU=0
 contW=0
 alpha=0.05
-M=50
+M=1000
 U_n <- rep(NA, M)
 W_n <- rep(NA, M)
 for(i in 1:M) {
@@ -228,7 +225,7 @@ D <- matrix(0, p, p)
 D[4,9] = 1
 alpha=0.05
 
-temp=log.LRT(X,D, links=T)
+temp=log.LRT(X,D, links=T,mu=1.2)
 U_n=temp$U_n
 W_n=temp$W_n
 
@@ -289,7 +286,7 @@ cat("U_n:", U_n, "   W_n:", W_n)
 # PART 5 FINAL ------------------------------------------------------------
 ##
 #PROVE BOXCOX
-data=read.csv("data/cell_signaling/original/pma.csv",header=T,sep=",")
+data=read.csv("data/cell_signaling/normalized_and_scaled/pma_normalized.csv",header=T,sep=",")
 X=data.matrix(data, rownames.force = NA)
 #data will be our X matrix
 p=11
@@ -320,6 +317,138 @@ for ( i in 1:dim(X)[2]){
 hist(X[,6],breaks=50)
 
 
+#FIRST CONNECTION: PIP2->PKC (columns 4  and column 9) ### MISSED: ci dovrebbe essere
+### H0: F = { (4,9) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[4,9] = 1
+alpha=0.05
+MU=100
+
+temp=log.LRT(X,D, links=T,mu=MU)
+U_n=temp$U_n
+W_n=temp$W_n
+
+if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
+## OKKKK, we accept the null hypothesis
+
+out=MLEdag(X=X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
+out$pval
+# they reject the null hypothesis
+## DIFFERENCE
+#first connection
+tab <- matrix(c(0.0349,-11.13,-10.02,
+                0.0349,-11.13,-10.02,
+                0.0349,-11.13,-10.02,
+                0.0349,-11.13,-10.02,), ncol=3, byrow=TRUE)
+colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
+rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
+tab <- as.table(tab)
+
+
+
+#SECOND CONNECTION: PKC->Jnk  # C'é
+### H0: F = { (9,11) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[9,11] = 1
+alpha=0.05
+MU=100
+temp=log.LRT(X,D, links=T,mu=MU)
+U_n=temp$U_n
+W_n=temp$W_n
+
+if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
+#dovremmo rigettare
+#male
+out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
+out$pval
+
+
+tab <- matrix(c(5.21e-10,20.38,19.69,
+                ,5.21e-10,22.7,22.01
+                ,1.72e-06,22.7,22.01
+                ,1.72e-06,22.7,22.01,exp(-3.189)), ncol=3, byrow=TRUE)
+colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
+rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
+tab <- as.table(tab)
+
+
+#Third CONNECTION: PKC->PIP3 (columns 4  and column 9) # NON C'è
+### H0: F = { (9,5) }, and A[F] = 0
+D <- matrix(0, p, p)
+D[9,5] = 1
+alpha=0.05
+U_n=rep(NA,100)
+W_n=rep(NA,100)
+pvalues=rep(NA,100)
+MU=100
+
+for ( i in 1:100){
+  MU=i
+  temp=log.LRT(X,D, links=T,mu=MU)
+  U_n[i]=temp$U_n
+  W_n[i]=temp$W_n
+  
+  #if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
+  #dovremmo accettare H0
+  #ok
+  out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
+  pvalues[i]=out$pval
+  
+}
+
+plot(pvalues,col="red")
+plot(U_n,add=TRUE,col="blue")
+
+tab <- matrix(c(0.65,-12.61,-11.80
+                ,0.65,-15.18,-14.18
+                ,0.65,-12.61,-11.8
+                ,0.65,-12.61,-11.8), ncol=3, byrow=TRUE)
+colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
+rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
+tab <- as.table(tab)
+
+#PATHWAY
+#PATHWAY LINKAGE
+#check all the connections from PKC
+#PKC->(RAF;MEK,ERK) which means columns (9->1,2,6)
+D <- matrix(0, p, p)
+D[9,1] = 1
+D[1,2] = 1
+D[2,6] = 1
+alpha=0.05
+MU=100
+#first connection
+temp=log.LRT(X,D, links=F,mu=MU)
+U_n=temp$U_n
+W_n=temp$W_n
+cat("U_n:", U_n, "   W_n:", W_n)
+# non rigettiamo l'hp nulla quindi ok
+out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
+out$pval
+
+
+tab <- matrix(c(2.9e-96,-71.65,-55.68
+                ,2.9e-96,-71.65,-55.68
+                ,2.9e-96,-71.65,-55.68
+                ,2.9e-96,-71.65,-55.68), ncol=3, byrow=TRUE)
+colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
+rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
+tab <- as.table(tab)
+
+
+# PART6 -------------------------------------------------------------------
+#import concatenated
+data=read.csv("data/cell_signaling/normalized_and_scaled/concatenated_normalized.csv",header=T,sep=",")
+X=data.matrix(data, rownames.force = NA)
+#data will be our X matrix
+p=11
+#transformation
+
+#DATA TRANSFORMATION
+for ( i in 1:dim(X)[2]){
+  X[,i]=normalize(X[,i])
+}
+
 #FIRST CONNECTION: PIP2->PKC (columns 4  and column 9)
 ### H0: F = { (4,9) }, and A[F] = 0
 D <- matrix(0, p, p)
@@ -336,13 +465,12 @@ if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can
 
 out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
 out$pval
-# they reject the null hypothesis
+
 ## DIFFERENCE
-#first connection
-tab <- matrix(c(0.005,exp(-0.014),exp(-0.703),
-                0.005,exp(-0.014),exp(-0.703),
-                0.005,exp(-0.014),exp(-0.703),
-                0.005,exp(-0.014),exp(-0.703)), ncol=3, byrow=TRUE)
+tab <- matrix(c(1.67e-113,-883,-Inf
+                ,1.67e-113,-883,-Inf
+                ,1.67e-113,-883,-Inf
+                ,1.67e-113,-883,-Inf, ncol=3, byrow=TRUE)
 colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
 rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
 tab <- as.table(tab)
@@ -354,7 +482,7 @@ tab <- as.table(tab)
 D <- matrix(0, p, p)
 D[9,11] = 1
 alpha=0.05
-MU=0.01
+MU=100
 
 temp=log.LRT(X,D, links=T,mu=MU)
 U_n=temp$U_n
@@ -367,10 +495,10 @@ out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
 out$pval
 
 
-tab <- matrix(c(1.72e-06,exp(-2.594),exp(-3.189)
-                ,1.72e-06,exp(-2.594),exp(-3.189)
-                ,1.72e-06,exp(-2.594),exp(-3.189)
-                ,1.72e-06,exp(-2.594),exp(-3.189)), ncol=3, byrow=TRUE)
+tab <- matrix(c(0,-466.16,-466.86
+                ,0,-466.16,-466.86
+                ,0,-466.16,-466.86
+                ,0,-466.16,-466.86, ncol=3, byrow=TRUE)
 colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
 rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
 tab <- as.table(tab)
@@ -381,7 +509,7 @@ tab <- as.table(tab)
 D <- matrix(0, p, p)
 D[9,5] = 1
 alpha=0.05
-MU=0.01
+MU=100
 
 temp=log.LRT(X,D, links=T,mu=MU)
 U_n=temp$U_n
@@ -394,10 +522,10 @@ out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
 out$pval
 
 
-tab <- matrix(c(0.166,exp(-0.56),exp(-0.454)
-                ,0.166,exp(-0.56),exp(-0.454)
-                ,0.166,exp(-0.56),exp(-0.454)
-                ,0.166,exp(-0.56),exp(-0.454)), ncol=3, byrow=TRUE)
+tab <- matrix(c(3.37e-30,-1342.46,-Inf
+                ,3.37e-30,-1342.46,-Inf
+                ,3.37e-30,-1342.46,-Inf
+                ,3.37e-30,-1342.46,-Inf), ncol=3, byrow=TRUE)
 colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
 rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
 tab <- as.table(tab)
@@ -411,132 +539,7 @@ D[9,1] = 1
 D[1,2] = 1
 D[2,6] = 1
 alpha=0.05
-MU=0.01
-
-#first connection
-temp=log.LRT(X,D, links=F,mu=MU)
-U_n=temp$U_n
-W_n=temp$W_n
-cat("U_n:", U_n, "   W_n:", W_n)
-# non rigettiamo l'hp nulla quindi ok
-out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
-out$pval
-#loro neanche rigettano
-#non rigettano l'hp nulla come noi
-
-tab <- matrix(c(0.0001,exp(-1.246),exp(-1.936)
-                ,0.0001,exp(-1.246),exp(-1.936)
-                ,0.0001,exp(-1.246),exp(-1.936)
-                ,0.0001,exp(-1.246),exp(-1.936)), ncol=3, byrow=TRUE)
-colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
-rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
-tab <- as.table(tab)
-
-
-# PART6 -------------------------------------------------------------------
-#import concatenated
-data=read.csv("data/cell_signaling/original/concatenated.csv",header=T,sep=",")
-X=data.matrix(data, rownames.force = NA)
-#data will be our X matrix
-p=11
-#transformation
-
-#DATA TRANSFORMATION
-for ( i in 1:dim(X)[2]){
-  X[,i]=normalize(X[,i])
-}
-
-#FIRST CONNECTION: PIP2->PKC (columns 4  and column 9)
-### H0: F = { (4,9) }, and A[F] = 0
-D <- matrix(0, p, p)
-D[4,9] = 1
-alpha=0.05
-MU=0.01
-
-temp=log.LRT(X,D, links=T,mu=MU)
-U_n=temp$U_n
-W_n=temp$W_n
-
-if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
-## OKKKK, we accept the null hypothesis
-
-out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
-out$pval
-
-## DIFFERENCE
-tab <- matrix(c(0.227,exp(-19.90),exp(-20.47)
-                ,0.227,exp(-19.90),exp(-20.47)
-                ,0.227,exp(-19.90),exp(-20.47)
-                ,0.227,exp(-19.90),exp(-20.47), ncol=3, byrow=TRUE)
-colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
-rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
-tab <- as.table(tab)
-
-
-
-#SECOND CONNECTION: PKC->Jnk (columns 4  and column 9)
-### H0: F = { (9,11) }, and A[F] = 0
-D <- matrix(0, p, p)
-D[9,11] = 1
-alpha=0.05
-MU=0.01
-
-temp=log.LRT(X,D, links=T,mu=MU)
-U_n=temp$U_n
-W_n=temp$W_n
-
-if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
-#dovremmo rigettare
-#male
-out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
-out$pval
-
-
-tab <- matrix(c(1.99e-63,exp(19.19),exp(18.49)
-                ,1.99e-63,exp(19.19),exp(18.49)
-                ,1.99e-63,exp(19.19),exp(18.49)
-                ,1.93e-63,exp(19.19),exp(18.49)), ncol=3, byrow=TRUE)
-colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
-rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
-tab <- as.table(tab)
-
-
-#Third CONNECTION: PKC->PIP3 (columns 4  and column 9)
-### H0: F = { (9,5) }, and A[F] = 0
-D <- matrix(0, p, p)
-D[9,5] = 1
-alpha=0.05
-MU=10
-
-temp=log.LRT(X,D, links=T,mu=MU)
-U_n=temp$U_n
-W_n=temp$W_n
-
-if(U_n>log(1/alpha)) cat(" We can reject the null hypothesis") else cat(" We can not reject the null hypothesis")
-#dovremmo accettare H0
-#ok
-out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
-out$pval
-
-
-tab <- matrix(c(0.028,exp(-34.76),exp(-21.05)
-                ,0.028,exp(-34.76),exp(-21.05)
-                ,0.028,exp(-34.76),exp(-21.05)
-                ,0.028,exp(-34.76),exp(-21.05)), ncol=3, byrow=TRUE)
-colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
-rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
-tab <- as.table(tab)
-
-#PATHWAY
-#PATHWAY LINKAGE
-#check all the connections from PKC
-#PKC->(RAF;MEK,ERK) which means columns (9->1,2,6)
-D <- matrix(0, p, p)
-D[9,1] = 1
-D[1,2] = 1
-D[2,6] = 1
-alpha=0.05
-MU=0.1
+MU=100
 
 temp=log.LRT(X,D, links=F,mu=MU)
 U_n=temp$U_n
@@ -545,13 +548,12 @@ cat("U_n:", U_n, "   W_n:", W_n)
 # non rigettiamo l'hp nulla quindi ok
 out=MLEdag(X,D=D,tau=0.35, mu=MU, rho=1.2, trace_obj = F)
 out$pval
-#loro neanche rigettano
-#non rigettano l'hp nulla come noi
 
-tab <- matrix(c(,7.02e-10,exp(-45.28),exp(-37.06)
-                ,7.02e-10,exp(-45.28),exp(-37.06)
-                ,7.02e-10,exp(-45.28),exp(-37.06)
-                ,7.02e-10,exp(-45.28),exp(-37.06), ncol=3, byrow=TRUE)
+
+tab <- matrix(c(0,-1115.38,-Inf
+                ,0,-1115.38,-Inf
+                ,0,-1115.38,-Inf
+                ,0,-1115.38,-Inf), ncol=3, byrow=TRUE)
 colnames(tab) <- c('pvalue_MLE_dag','Un','Wn')
 rownames(tab) <- c('k=0.01','k=0.1','k=1','k=10')
 tab <- as.table(tab)
