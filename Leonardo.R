@@ -372,9 +372,10 @@ for (i in a){
   j=j+1
 }
 
+par(mfrow=c(1,1),mar=c(5,2,4.1,2.1))
 # plot the first curve by calling plot() function
 # First curve is plotted
-plot(a, pvalues, type="o", col="blue", pch="o", ylim=c(-20,20),lty=1 )
+plot(a, pvalues, type="o", col="blue", pch="o", ylim=c(-20,20),lty=1,main="Statistics" )
 
 # Add second curve to the same plot by calling points() and lines()
 # Use symbol '*' for points.
@@ -466,21 +467,23 @@ out$pval
 '''
 U_n=rep(NA,41)
 W_n=rep(NA,41)
-pvalues=rep(NA,41)
-a=seq(0,2,0.05)
+pvalues=rep(NA,51)
+a=seq(0,5,0.1)
 j=1
 for (i in a){
-  temp=log.LRT(X,D, links=F,mu=i, alpha=alpha)
-  U_n[j]=temp$U_n
-  W_n[j]=temp$W_n
+  #temp=log.LRT(X,D, links=F,mu=i, alpha=alpha)
+  #U_n[j]=temp$U_n
+  #W_n[j]=temp$W_n
   out=MLEdag(X,D=D,tau=alpha, mu=i, rho=1.2, trace_obj = F)
   pvalues[j]=out$pval
   j=j+1
 }
 
+par(mfrow=c(1,1),mar=c(5,2,4.1,2.1))
 # plot the first curve by calling plot() function
 # First curve is plotted
-plot(a, pvalues, type="o", col="blue", pch="o", ylim=c(0,1),lty=1 )
+plot(a, pvalues, type="o", col="blue", pch="o", ylim=c(-0,1),lty=1,main="pvalues")
+
 '''
 # Add second curve to the same plot by calling points() and lines()
 # Use symbol '*' for points.

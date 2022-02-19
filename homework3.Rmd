@@ -447,9 +447,15 @@ k           pvalue_MLE_dag    log(Un)               log(Wn)
 100        1.62e-106          -71.56              -56.09
 ---------  --------------   ---------------- ----------------
 
-This is a interesting simulation: our statistics log(Un) and log(Wn) had a stable result as the k parameter changed. On the other hand MLE_dag produce contrasting pvalues. Also in this situation an image should help to understand the fluctuation.
+This is a interesting simulation: our statistics log(Un) and log(Wn) had a stable result as the k parameter changed. On the other hand MLE_dag produce contrasting p-values. Also in this situation an image should help to understand the fluctuation.
+![statistiche](data/statistics_images/Part5.4.png)
 
-As a final remark, we need to notice that we have used a dataset in which there was a perturbation on PKC that should be responsible of these results. Consequently, we need to pay attention to the conclusion based on the whole dataset: will the results be the same?
+
+As a final remark, we need to notice that we have used a dataset in which there was a perturbation on PKC that should be responsible of these results. Consequently, we need to pay attention to the conclusion based on the whole dataset: will the results be the same?  
+
+
+
+
 ## POINT 6
 Now let's move on the entire dataset obtained concatenating all the data.
 As before, we can visually check our zero-mean Gaussian aasumptions.
@@ -493,6 +499,8 @@ k           pvalue_MLE_dag    log(Un)               log(Wn)
 
 In this case, we need to notice the strong influence of k parameter on our statistics as in point five: we ended up with  a wrong conclusion in all the case expect for k=1. 
 
+![statistiche](data/statistics_images/Part6.2.png)
+
 ### THIRD  CONNECTION: PKC->PIP3 # Non c'è #bene*2
 
 k           pvalue_MLE_dag    log(Un)               log(Wn)
@@ -519,6 +527,8 @@ k           pvalue_MLE_dag    log(Un)               log(Wn)
 ---------  --------------   ---------------- ----------------
 
 This is a interesting simulation: our statistics log(Un) and log(Wn) had a stable result as the k parameter changed. On the other hand MLE_dag produce contrasting pvalues. Also in this situation an image should help to understand the fluctuation.
+
+![statistiche](data/statistics_images/Part6.4.png)
 
 
 #CONCLUSIONI
