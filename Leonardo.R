@@ -210,6 +210,78 @@ for(i in 1:M) {
 cat('1-beta is equal to for U: ', contU/M,'   ,1-beta is equal to for W:',contW/M)
 #0.741 and 0.859
 
+
+# SIZE pathway ------------------------------------------------------------
+
+p = 10
+n = 100
+sparsity = 2/p
+
+# Building the linkages set
+D.pathway = matrix(0, p,p)
+D.pathway[3, 4]=1
+D.pathway[4, 5]=1
+D.pathway[5, 6]=1
+D.pathway[6, 7]=1
+# Building A accordingly to h0
+A.pathway.hidden=matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A.pathway.hidden[3,4]=1
+A.pathway.hidden[4,5]=0
+A.pathway.hidden[5,6]=0
+A.pathway.hidden[6,7]=0
+
+out_U = 0
+out_W = 0
+m=1000
+
+for(i in 1:m){
+  set.seed(2018)
+  X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden) )
+  LRT = log.LRT(X, D.pathway, links=F,mu=1.2,alpha=0.05)
+  if(LRT$links)
+    cat('ERRORE, chiamata LRT con links=', links,'\n')
+  out_U = out_U+(LRT$U_n>-log(alpha))
+  out_W = out_W+(LRT$W_n>-log(alpha))
+}
+
+cat("U_n =", out_U/m, "   W_n = ",out_W/m)
+#0 and 0
+
+# POWER pathway -----------------------------------------------------------
+
+p = 10
+n= 100
+sparsity = 2/p
+
+D.pathway = matrix(0, p,p)
+D.pathway[3, 4]=1
+D.pathway[4, 5]=1
+D.pathway[5, 6]=1
+
+# Building A  NOT accordingly to h0
+A.pathway.hidden=matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A.pathway.hidden[3,4]=1
+A.pathway.hidden[4,5]=1
+A.pathway.hidden[5,6]=1
+
+
+out_U = 0
+out_W = 0
+m=1000
+
+for(i in 1:m){
+  set.seed(2018)
+  X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden) )
+  LRT = log.LRT(X, D.pathway, links=F,mu=1.2,alpha=0.05)
+  if(LRT$links)
+    cat('ERRORE, chiamata LRT con links=', links,'\n')
+  out_U = out_U+(LRT$U_n>-log(alpha))
+  out_W = out_W+(LRT$W_n>-log(alpha))
+}
+
+cat("U_n =", out_U/m, "   W_n = ",out_W/m)
+#1 e 1
+
 # PART 4 ------------------------------------------------------------------
 
 #import concatenated

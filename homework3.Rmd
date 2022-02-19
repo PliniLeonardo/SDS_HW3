@@ -1,8 +1,8 @@
 ---
 title: "R Notebook"
 output:
-  html_notebook: default
   pdf_document: default
+  html_notebook: default
 ---
 
 
@@ -253,6 +253,8 @@ test_link(h0 = F, m=1e2)
 
 Now let's check the size $\alpha$  and the power $ 1- \beta $ of our procedure.
 
+Let's check the size and the power in the case of linkages-type test.
+
 Starting from the size and noticing that the power is the proportion of rejections we get by applying our test on M dataset generated from a model *compatible* with H0,  we implemented the following simulation:
 ```{r}
 ### Parameters
@@ -340,9 +342,92 @@ for(i in 1:M) {
 cat('1-beta is equal to for U: ', contU/M,'   ,1-beta is equal to for W:',contW/M)
 #1-beta is equal to for U:  0.969    ,1-beta is equal to for W: 0.991
 ```
- that produce as results 0.969 for Un and 0.991 for Wn respectively.
+that produce as results 0.969 for Un and 0.991 for Wn respectively.
  
+Let's continue checking the size and the power for pathway-type test.
+```{r}
+p = 10
+n = 100
+sparsity = 2/p
 
+# Building the linkages set
+D.pathway = matrix(0, p,p)
+D.pathway[3, 4]=1
+D.pathway[4, 5]=1
+D.pathway[5, 6]=1
+D.pathway[6, 7]=1
+# Building A accordingly to h0
+A.pathway.hidden=matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A.pathway.hidden[3,4]=1
+A.pathway.hidden[4,5]=0
+A.pathway.hidden[5,6]=0
+A.pathway.hidden[6,7]=0
+
+out_U = 0
+out_W = 0
+m=1000
+
+for(i in 1:m){
+  set.seed(2018)
+  X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden) )
+  LRT = log.LRT(X, D.pathway, links=F,mu=1.2,alpha=0.05)
+  if(LRT$links)
+    cat('ERRORE, chiamata LRT con links=', links,'\n')
+  out_U = out_U+(LRT$U_n>-log(alpha))
+  out_W = out_W+(LRT$W_n>-log(alpha))
+}
+
+cat("U_n =", out_U/m, "   W_n = ",out_W/m)
+#0 and 0
+```
+We surprisingly ended up with a size equal to 0 for each test.
+
+At the end, let's find the power of pathway-type test
+```{r}
+p = 10
+n= 100
+sparsity = 2/p
+
+D.pathway = matrix(0, p,p)
+D.pathway[3, 4]=1
+D.pathway[4, 5]=1
+D.pathway[5, 6]=1
+
+# Building A  NOT accordingly to h0
+A.pathway.hidden=matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A.pathway.hidden[3,4]=1
+A.pathway.hidden[4,5]=1
+A.pathway.hidden[5,6]=1
+
+
+out_U = 0
+out_W = 0
+m=1000
+
+for(i in 1:m){
+  set.seed(2018)
+  X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden) )
+  LRT = log.LRT(X, D.pathway, links=F,mu=1.2,alpha=0.05)
+  if(LRT$links)
+    cat('ERRORE, chiamata LRT con links=', links,'\n')
+  out_U = out_U+(LRT$U_n>-log(alpha))
+  out_W = out_W+(LRT$W_n>-log(alpha))
+}
+
+cat("U_n =", out_U/m, "   W_n = ",out_W/m)
+#1 e 1
+```
+Also in this case, we reached amazing power level equal to 1 for each test.
+
+Riassuming with a table, we have that:
+
+type            Statistic         level           power
+--------   --------------   ---------------- ----------------
+linkage         Un               0.092           0.969
+linkage         Wn               0.103           0.991
+pathway         Un                0                1
+pathway         Wn                0                1
+---------  --------------   ---------------- ----------------
 ## PART 4
 
 We found interesting to test the performance of our method for missed linkages so we decided to test the connection between PIP2->PKC. Even if all the missed linkages were very attractive, we decided to see the behaviour of the test under different conditions. For this reason, we opted for PKC->Jnk as second connection and PKC->PIP3 as third connection. In this way we could have a general overview of the performance.
@@ -392,7 +477,7 @@ This seems a good result starting from our data: in fact, they grafically appear
 
 ### CONNECTION 1 PIP2->PKC # pareggio
 
- We fixed a level alpha=0.05 so that we have $log(\frac{1}{\alpha})\simeq1.30$.
+ We fixed a level alpha=0.05 so that we have $log(\frac{1}{\alpha})\simeq2.99$.
  The following table summarize our results.
 
 k           pvalue_MLE_dag    log(Un)               log(Wn)

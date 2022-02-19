@@ -265,13 +265,15 @@ test_link = function(m=1e3, alpha=.05, h0=T){
 }
 ```
 
+
 ## PART 3
 
-Now let's check the size $\alpha$ and the power $1-\beta$ of our procedure.
+Now let's check the size $\alpha$  and the power $ 1- \beta $ of our procedure.
 
-Starting from the size and noticing that the power is the proportion of rejections we get by applying our test on M dataset generated from a model *compatible* with H0,  we implemented a simulation, which results are 0.092 for Un and 0.103 for Wn respectively.
+Let's check the size and the power in the case of linkages-type test.
 
-```{r, echo=FALSE}
+Starting from the size and noticing that the power is the proportion of rejections we get by applying our test on M dataset generated from a model *compatible* with H0,  we implemented the following simulation:
+```{r}
 ### Parameters
 set.seed(2018)
 p <- 10
@@ -309,11 +311,12 @@ for(i in 1:M) {
 
 cat('alpha is equal to for U ', contU/M,'alpha is equal to for W',contW/M)
 
+# 0.092 and 0.103
 ```
+Our results are 0.092 for Un and 0.103 for Wn respectively.
 
-
-Noticing that the power is the proportion of rejections we get by applying our test on M dataset generated from a model *NOT compatible* with H0,  we implemented another simulation that produced as results 0.969 for Un and 0.991 for Wn respectively.
-```{r, echo =FALSE}
+Noticing that the power is the proportion of rejections we get by applying our test on M dataset generated from a model *NOT compatible* with H0,  we implemented the following simulation:
+```{r}
 #Beta= the probability of failing to reject the null hypothesis when the null 
 # hypothesis is false
 p=10
@@ -323,9 +326,6 @@ sparsity=2/p
 D <- matrix(0, p, p)
 D[2:p,1]=1
 D[3:p,2]=1
-D[2,8] =1
-D[5,6]=1
-D[8,9]=1
 
 ### Adjacency Matrix >> Hub
 # All connected to 1, NO EDGE between p-2 >> **NOT COMPATIBLE** with H0
@@ -339,7 +339,6 @@ A[8,9]=1
 A[2:p,1]=1
 A[3:p,2]=1
 
-
 # SIMULATION
 contU=0
 contW=0
@@ -349,7 +348,7 @@ U_n <- rep(NA, M)
 W_n <- rep(NA, M)
 for(i in 1:M) {
   X   <- matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A) )
-  temp=log.LRT(X,D, links=T,mu=1.2, alpha=alpha)
+  temp=log.LRT(X,D, links=T,mu=1.2,alpha=alpha)
   U_n[i]=temp$U_n
   W_n[i]=temp$W_n
   
@@ -360,8 +359,93 @@ for(i in 1:M) {
 cat('1-beta is equal to for U: ', contU/M,'   ,1-beta is equal to for W:',contW/M)
 #1-beta is equal to for U:  0.969    ,1-beta is equal to for W: 0.991
 ```
+that produce as results 0.969 for Un and 0.991 for Wn respectively.
  
-Please notice that we decided to hide the simulations' code and chose to only report the results, but you can still check it in the markdown file
+Let's continue checking the size and the power for pathway-type test.
+```{r}
+p = 10
+n = 100
+sparsity = 2/p
+
+# Building the linkages set
+D.pathway = matrix(0, p,p)
+D.pathway[3, 4]=1
+D.pathway[4, 5]=1
+D.pathway[5, 6]=1
+D.pathway[6, 7]=1
+# Building A accordingly to h0
+A.pathway.hidden=matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A.pathway.hidden[3,4]=1
+A.pathway.hidden[4,5]=0
+A.pathway.hidden[5,6]=0
+A.pathway.hidden[6,7]=0
+
+out_U = 0
+out_W = 0
+m=1000
+
+for(i in 1:m){
+  set.seed(2018)
+  X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden) )
+  LRT = log.LRT(X, D.pathway, links=F,mu=1.2,alpha=0.05)
+  if(LRT$links)
+    cat('ERRORE, chiamata LRT con links=', links,'\n')
+  out_U = out_U+(LRT$U_n>-log(alpha))
+  out_W = out_W+(LRT$W_n>-log(alpha))
+}
+
+cat("U_n =", out_U/m, "   W_n = ",out_W/m)
+#0 and 0
+```
+We surprisingly ended up with a size equal to 0 for each test.
+
+At the end, let's find the power of pathway-type test
+```{r}
+alpha=0.05
+p = 10
+n= 100
+sparsity = 2/p
+
+D.pathway = matrix(0, p,p)
+D.pathway[3, 4]=1
+D.pathway[4, 5]=1
+D.pathway[5, 6]=1
+
+# Building A  NOT accordingly to h0
+A.pathway.hidden=matrix(rbinom(p*p,1,sparsity)*sign(runif(p*p,min=-1,max=1)),p,p)
+A.pathway.hidden[3,4]=1
+A.pathway.hidden[4,5]=1
+A.pathway.hidden[5,6]=1
+
+
+out_U = 0
+out_W = 0
+m=1000
+
+for(i in 1:m){
+  set.seed(2018)
+  X = matrix( rnorm(n*p), n, p) %*% t(solve(diag(p) - A.pathway.hidden) )
+  LRT = log.LRT(X, D.pathway, links=F,mu=1.2,alpha=alpha)
+  if(LRT$links)
+    cat('ERRORE, chiamata LRT con links=', links,'\n')
+  out_U = out_U+(LRT$U_n>-log(alpha))
+  out_W = out_W+(LRT$W_n>-log(alpha))
+}
+
+cat("U_n =", out_U/m, "   W_n = ",out_W/m)
+#1 e 1
+```
+Also in this case, we reached amazing power level equal to 1 for each test.
+
+Riassuming with a table, we have that:
+
+type            Statistic         level           power
+--------   --------------   ---------------- ----------------
+linkage         Un               0.092           0.969
+linkage         Wn               0.103           0.991
+pathway         Un                0                1
+pathway         Wn                0                1
+---------  --------------   ---------------- ----------------
 
 ## PART 4
 
@@ -412,7 +496,7 @@ This seems a good result starting from our data: in fact, they graphically appea
 
 ### CONNECTION 1 PIP2->PKC # pareggio
 
- We fixed a level alpha=0.05 so that we have $log(\frac{1}{\alpha})\simeq1.30$.
+ We fixed a level alpha=0.05 so that we have $log(\frac{1}{\alpha})\simeq2.99$.
  The following table summarizes our results.
 
 k           pvalue_MLE_dag    log(Un)               log(Wn)
@@ -556,6 +640,6 @@ This is an interesting simulation: our statistics log(Un) and log(Wn) had a stab
 ### DOMANDE
 
 
-Regarding adjusting for multiplicity, we feel it could be a sensible choice in our case: while testing our pathway-type hypothesis, we are dealing with the intersection of different events, and, if we want to check for a path between the element 1, 2 and 3, we need to check if there's a link between 1 and 2, and then between 2 and 3. This means that for every single link we are searching has an alpha level of false rejection risk associated to it, and adjusting for multiplicity (via Bonferroni's method or others) could prove to be useful in avoiding a pretty high risk of false rejection, since as we know the probability of a Type I error in multiple tests is $ P= 1-(1-\alpha)^{k} $, where alpha is our significance level and k is the number of tests we are performing. 
+Regarding adjusting for multiplicity, we feel it could be a sensible choice in our case: while testing our pathway-type hypothesis, we are dealing with the intersection of different events, and, if we want to check for a path between the element 1, 2 and 3, we need to check if there's a link between 1 and 2, and then between 2 and 3. This means that for every single link we are searching has an alpha level of false rejection risk associated to it, and adjusting for multiplicity (via Bonferroni's method or others) could prove to be useful in avoiding a pretty high risk of false rejection, since as we know the probability of a Type I error in multiple tests is $P= 1-(1-\alpha)^{k}$, where alpha is our significance level and k is the number of tests we are performing. 
 Adjusting for multiplicity could also prove to be useful in the linkage case: while we aren't performing multiple test in this homework, testing our linkages one-by-one, one could carry out their analysis on a set F, in which case adjusting for multiplicity could prove to be useful, if not downright needed.
 
