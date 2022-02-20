@@ -1,10 +1,10 @@
 ---
 title: "R Notebook"
 output:
-  html_notebook: default
   pdf_document: default
   html_document:
     df_print: paged
+  html_notebook: default
 ---
 
 
@@ -642,4 +642,6 @@ This is an interesting simulation: our statistics log(Un) and log(Wn) had a stab
 
 Regarding adjusting for multiplicity, we feel it could be a sensible choice in our case: while testing our pathway-type hypothesis, we are dealing with the intersection of different events, and, if we want to check for a path between the element 1, 2 and 3, we need to check if there's a link between 1 and 2, and then between 2 and 3. This means that for every single link we are searching has an alpha level of false rejection risk associated to it, and adjusting for multiplicity (via Bonferroni's method or others) could prove to be useful in avoiding a pretty high risk of false rejection, since as we know the probability of a Type I error in multiple tests is $P= 1-(1-\alpha)^{k}$, where alpha is our significance level and k is the number of tests we are performing. 
 Adjusting for multiplicity could also prove to be useful in the linkage case: while we aren't performing multiple test in this homework, testing our linkages one-by-one, one could carry out their analysis on a set F, in which case adjusting for multiplicity could prove to be useful, if not downright needed.
+
+* 
 
