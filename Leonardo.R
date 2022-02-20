@@ -433,9 +433,9 @@ MU=0.01
 U_n=rep(NA,41)
 W_n=rep(NA,41)
 pvalues=rep(NA,41)
-a=seq(0,2,0.05)
+k=seq(0,2,0.05)
 j=1
-for (i in a){
+for (i in k){
   temp=log.LRT(X,D, links=T,mu=i, alpha=alpha)
   U_n[j]=temp$U_n
   W_n[j]=temp$W_n
@@ -447,17 +447,17 @@ for (i in a){
 par(mfrow=c(1,1),mar=c(5,2,4.1,2.1))
 # plot the first curve by calling plot() function
 # First curve is plotted
-plot(a, pvalues, type="o", col="blue", pch="o", ylim=c(-20,20),lty=1,main="Statistics" )
+plot(k, pvalues, type="o", col="blue", pch="o", ylim=c(-20,20),lty=1,main="Statistics" )
 
 # Add second curve to the same plot by calling points() and lines()
 # Use symbol '*' for points.
-points(a, U_n, col="red", pch="*",ylim=c(-20,20))
-lines(a, U_n, col="red",lty=2)
+points(k, U_n, col="red", pch="*",ylim=c(-20,20))
+lines(k, U_n, col="red",lty=2)
 
 # Add Third curve to the same plot by calling points() and lines()
 # Use symbol '+' for points.
-points(a, W_n, col="green",ylim=c(-20,20),pch="+")
-lines(a, W_n, col="green", lty=3)
+points(k, W_n, col="green",ylim=c(-20,20),pch="+")
+lines(k, W_n, col="green", lty=3)
 
 # Adding a legend inside box at the location (2,40) in graph coordinates.
 # Note that the order of plots are maintained in the vectors of attributes.
@@ -540,9 +540,9 @@ out$pval
 U_n=rep(NA,41)
 W_n=rep(NA,41)
 pvalues=rep(NA,51)
-a=seq(0,5,0.1)
+k=seq(0,5,0.1)
 j=1
-for (i in a){
+for (i in k){
   #temp=log.LRT(X,D, links=F,mu=i, alpha=alpha)
   #U_n[j]=temp$U_n
   #W_n[j]=temp$W_n
@@ -554,7 +554,7 @@ for (i in a){
 par(mfrow=c(1,1),mar=c(5,2,4.1,2.1))
 # plot the first curve by calling plot() function
 # First curve is plotted
-plot(a, pvalues, type="o", col="blue", pch="o", ylim=c(-0,1),lty=1,main="pvalues")
+plot(k, pvalues, type="o", col="blue", pch="o", ylim=c(-0,1),lty=1,main="pvalues")
 
 '''
 # Add second curve to the same plot by calling points() and lines()
@@ -639,12 +639,12 @@ out=MLEdag(X,D=D,tau=alpha, mu=MU, rho=1.2, trace_obj = F)
 out$pval
 
 
-U_n=rep(NA,51)
-W_n=rep(NA,51)
-pvalues=rep(NA,51)
-a=seq(0,10,0.2)
+U_n=rep(NA,61)
+W_n=rep(NA,61)
+pvalues=rep(NA,61)
+k=seq(0,12,0.2)
 j=1
-for (i in a){
+for (i in k){
   temp=log.LRT(X,D, links=T,mu=i, alpha=alpha)
   U_n[j]=temp$U_n
   W_n[j]=temp$W_n
@@ -653,22 +653,22 @@ for (i in a){
   j=j+1
 }
 
-par(mfrow = c(3,1),mar=c(2,2,1,1))
+par(mfrow = c(3,1),mar=c(3,3,1,1))
 # plot the first curve by calling plot() function
 # First curve is plotted
-plot(a, pvalues, type="o", col="blue", pch="o", ylim=c(-0.5,1.5),main="pvalues" )
+plot(k, pvalues, type="o", col="blue", pch="o", ylim=c(-0.5,1.5),main="pvalues", xlab="k")
 
 # Add second curve to the same plot by calling points() and lines()
 # Use symbol '*' for points.
-plot(a, U_n, col="red",main="U_n",ylim=c(-500,500))
+plot(k, U_n, col="red",main="U_n",ylim=c(-500,500))
 #points(a, U_n, col="red", pch="*",ylim=c(-300,100),main="U_n")
-lines(a, U_n, col="red")
+lines(k, U_n, col="red")
 
 # Add Third curve to the same plot by calling points() and lines()
 # Use symbol '+' for points.
-plot(a, W_n, col="green",main="W_n",ylim=c(-500,500))
+plot(k, W_n, col="green",main="W_n",ylim=c(-500,500))
 #points(a, W_n, col="green",ylim=c(-300,100),pch="+")
-lines(a, W_n, col="green")
+lines(k, W_n, col="green")
 
 
 
@@ -734,9 +734,9 @@ cat("U_n:", U_n, "   W_n:", W_n)
 U_n=rep(NA,41)
 W_n=rep(NA,41)
 pvalues=rep(NA,41)
-a=seq(0,100,1)
+k=seq(0,100,1)
 j=1
-for (i in a){
+for (i in k){
   #temp=log.LRT(X,D, links=F,mu=i, alpha=alpha)
   #U_n[j]=temp$U_n
   #W_n[j]=temp$W_n
@@ -748,7 +748,7 @@ for (i in a){
 par(mfrow=c(1,1),mar=c(5,2,4.1,2.1))
 # plot the first curve by calling plot() function
 # First curve is plotted
-plot(a, pvalues, type="l", col="blue", pch="o", ylim=c(0,1),lty=1 ,main="pvalues")
+plot(k, pvalues, type="l", col="blue", pch="o", ylim=c(0,1),lty=1 ,main="pvalues")
 
 # Add second curve to the same plot by calling points() and lines()
 # Use symbol '*' for points.
